@@ -15,6 +15,7 @@ init_paths() {
     NF_DEFAULT_TARGET=www.microsoft.com:443
     NF_DEFAULT_SNI=www.microsoft.com
     NF_SERVICE=nodeforge-xray.service
+    NF_CLI=/usr/local/bin/nodeforge
     NF_TRANSACTION=0
     NF_EXISTING=0
 }

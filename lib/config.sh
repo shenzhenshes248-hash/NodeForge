@@ -5,6 +5,7 @@ validate_uuid() { [[ $1 =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-f
 validate_short_id() { [[ $1 =~ ^[0-9a-f]{16}$ ]]; }
 load_existing() {
     require_regular "$NF_STATE"
+    state_schema_supported "$NF_STATE" || die 'Unsupported or invalid NodeForge state schema'
     validate_legacy_state_record "$NF_STATE" || die 'Invalid ownership record'
     local path expected actual
     for path in "$NF_CONFIG" "$NF_BIN" "$NF_UNIT" "$NF_LICENSE"; do require_regular "$path"; done

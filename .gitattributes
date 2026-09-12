@@ -4,3 +4,4 @@
 *.json text eol=lf
 *.service text eol=lf
 VERSION text eol=lf
+tests/fixtures/xray/xray text eol=lf

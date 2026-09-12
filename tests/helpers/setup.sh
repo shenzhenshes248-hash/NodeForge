@@ -18,6 +18,7 @@ NF_CONFIG=$NF_CONFIG_DIR/xray.json
 NF_STATE=$NF_DATA_DIR/state.json
 NF_PENDING=$NF_DATA_DIR/pending
 NF_UNIT=$NF_TEST_ROOT/etc/systemd/system/nodeforge-xray.service
+NF_CLI=$NF_TEST_ROOT/usr/local/bin/nodeforge
 mkdir -p "$(dirname "$NF_UNIT")"
 init_workspace
 trap 'rm -rf -- "$NF_TEST_ROOT" "$NF_WORK"' EXIT

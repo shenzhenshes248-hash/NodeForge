@@ -9,13 +9,5 @@ NF_SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh
 source "$NF_SOURCE/lib/common.sh"
 load_modules
-main() {
-    (( $# == 0 )) || die 'Usage: bash uninstall.sh'
-    preflight uninstall
-    command -v jq >/dev/null || die 'jq is required to read the ownership record safely'
-    acquire_lock
-    init_workspace
-    trap cleanup EXIT
-    uninstall_nodeforge
-}
-main "$@"
+# All modules and this final invocation are parsed before uninstall removes them.
+cli_main "$@"

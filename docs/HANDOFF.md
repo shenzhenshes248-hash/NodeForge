@@ -1,5 +1,7 @@
 # NodeForge 交接快照
 
+**2026-09-12 更新：M2 Phase 2 本地 CLI 已完成 B1/B2 blocker remediation，并在完整测试后进行只读 pre-commit audit，结论 READY FOR COMMIT，等待用户审核；尚未 commit。18 个隔离 Shell 套件、18 个 Python 测试、ShellCheck/Bash 语法检查及 diff 检查均 PASS。当前 VERSION 仍为 `v0.2.0-dev`，只支持 schema 1；没有操作 VPS、没有进入 Phase 3。当前设计、恢复边界和验证记录以 [M2_PHASE2.md](M2_PHASE2.md) 为准。Linux 原生权限、symlink、flock 和 systemd 行为仍需实机验证。以下保留 Phase 1 accepted handoff 历史快照，所列“尚未实现 CLI”描述属于该历史时点。后续先等待用户审核/指令。**
+
 当前停在 **M2 Phase 1 完成并提交**。下一步是 **M2 Phase 2 Local Management CLI**；本次交接没有开始 Phase 2，没有连接或操作 VPS。新会话先阅读本文、[Phase 1 约束](M2_PHASE1.md)及相关源码，再按用户确认的阶段边界推进。
 
 ## 目标与基线

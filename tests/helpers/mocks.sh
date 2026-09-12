@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 # All privileged/network operations are intercepted. No test calls host systemd.
+trusted_directory() { [[ -d $1 && ! -L $1 ]] || die 'Unsafe mock directory'; }
+trusted_file() { require_regular "$1"; }
 systemctl() {
     printf '%s\n' "$*" >> "$NF_TEST_ROOT/systemctl.calls"
     case $1 in
@@ -18,6 +20,9 @@ systemctl() {
     esac
 }
 install() {
+    fixture_install "$@"
+}
+fixture_install() {
     local mode=755 directory=0
     local -a args=()
     while (( $# )); do

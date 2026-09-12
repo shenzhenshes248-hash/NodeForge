@@ -32,7 +32,7 @@ begin_transaction() {
 }
 restore_snapshot_file() {
     local source=$1 destination=$2 temporary
-    require_regular "$source"
+    ( require_regular "$source" ) || return 1
     temporary=$(mktemp "${destination}.restore.XXXXXX") || return 1
     if ! cp -p -- "$source" "$temporary" || ! mv -fT -- "$temporary" "$destination"; then
         rm -f -- "$temporary"
@@ -57,15 +57,27 @@ remove_service_user() {
     if getent group nodeforge >/dev/null; then groupdel nodeforge || return 1; fi
 }
 rollback() {
+    if ! rollback_restore; then
+        log ERROR 'Recovery incomplete; pending transaction/evidence retained.'
+        return 1
+    fi
+}
+rollback_restore() {
     local existing active enabled
     warn 'Restoring the previous NodeForge installation'
+    if [[ -e $NF_PENDING/rollback-complete || -L $NF_PENDING/rollback-complete ]]; then
+        rollback_discard_pending || return 1
+        NF_TRANSACTION=0
+        return 0
+    fi
     [[ ! -L $NF_PENDING && -f $NF_PENDING/ready ]] || return 1
-    require_regular "$NF_PENDING/original.json"
+    ( require_regular "$NF_PENDING/original.json" ) || return 1
     jq -e '.owner == "NodeForge" and .schema == 1 and (.existing == 0 or .existing == 1) and
       (.active|type == "boolean") and (.enabled|type == "boolean")' "$NF_PENDING/original.json" >/dev/null || return 1
     existing=$(jq -r '.existing' "$NF_PENDING/original.json") || return 1
     active=$(jq -r '.active' "$NF_PENDING/original.json") || return 1
     enabled=$(jq -r '.enabled' "$NF_PENDING/original.json") || return 1
+    if [[ -e $NF_PENDING/cli-created || -L $NF_PENDING/cli-created ]]; then runtime_rollback_cleanup || return 1; fi
     if [[ $existing == 1 || -f $NF_UNIT ]]; then
         systemctl daemon-reload || return 1
         systemctl stop "$NF_SERVICE" || return 1
@@ -77,7 +89,7 @@ rollback() {
         restore_snapshot_file "$NF_PENDING/state.json" "$NF_STATE" || return 1
         restore_snapshot_file "$NF_PENDING/LICENSE.xray" "$NF_LICENSE" || return 1
     else
-        systemctl disable "$NF_SERVICE" >/dev/null 2>&1 || true
+        if [[ -f $NF_UNIT ]]; then systemctl disable "$NF_SERVICE" >/dev/null 2>&1 || return 1; fi
         rm -f -- "$NF_CONFIG" "$NF_BIN" "$NF_LICENSE" "$NF_UNIT" "$NF_STATE" || return 1
         if [[ -f $NF_PENDING/user-created ]]; then remove_service_user || return 1; fi
     fi
@@ -90,10 +102,40 @@ rollback() {
             systemctl is-active --quiet "$NF_SERVICE" || return 1
         fi
     fi
-    rm -rf -- "$NF_PENDING" || return 1
+    # Only after runtime/files/service have all been restored may evidence be
+    # retired. A completion marker allows a failed retirement to be retried
+    # without restoring from snapshot files already removed by retirement.
+    printf 'NodeForge local rollback restored\n' > "$NF_WORK/rollback-complete" || return 1
+    atomic_install "$NF_WORK/rollback-complete" "$NF_PENDING/rollback-complete" 600 root root || return 1
+    rollback_discard_pending || return 1
     NF_TRANSACTION=0
     if [[ $existing == 0 ]]; then
         rmdir -- "$NF_BIN_DIR/bin" "$NF_BIN_DIR" "$NF_CONFIG_DIR" "$NF_DATA_DIR/backups" "$NF_DATA_DIR" 2>/dev/null || true
+    fi
+}
+rollback_discard_pending() {
+    local path name
+    [[ -d $NF_PENDING && ! -L $NF_PENDING ]] || return 1
+    ( trusted_file "$NF_PENDING/rollback-complete" ) || return 1
+    [[ $(cat "$NF_PENDING/rollback-complete") == 'NodeForge local rollback restored' ]] || return 1
+    # Reject unknown contents before retiring any snapshot/reference files.
+    for path in "$NF_PENDING"/* "$NF_PENDING"/.[!.]* "$NF_PENDING"/..?*; do
+        [[ -e $path || -L $path ]] || continue
+        name=${path##*/}
+        case $name in
+            xray.json|xray|unit|state.json|LICENSE.xray|original.json|ready|user-created|cli-created|rollback-complete) ;;
+            *) return 1 ;;
+        esac
+        ( require_regular "$path" ) || return 1
+    done
+    for name in xray.json xray unit state.json LICENSE.xray original.json ready user-created cli-created; do
+        rm -f -- "$NF_PENDING/$name" || return 1
+    done
+    rm -f -- "$NF_PENDING/rollback-complete" || return 1
+    if ! rmdir -- "$NF_PENDING"; then
+        # Preserve the completed-recovery reference if directory retirement fails.
+        printf 'NodeForge local rollback restored\n' > "$NF_PENDING/rollback-complete" || return 1
+        return 1
     fi
 }
 finish_transaction() {
@@ -109,6 +151,7 @@ install_nodeforge() {
         NF_TRANSACTION=1
         rollback || die 'Interrupted installation could not be recovered'
     fi
+    runtime_preinstall
     NF_USER_CREATED=false
     if [[ -f $NF_STATE ]]; then
         load_existing
@@ -145,6 +188,7 @@ install_nodeforge() {
         systemctl start "$NF_SERVICE"
         check_service_health
         write_state
+        install_cli_runtime
         finish_transaction
         info 'Existing configuration preserved; protected backup created'
         print_node
@@ -168,11 +212,19 @@ install_nodeforge() {
     fi
     write_state
     activate_service
+    install_cli_runtime
     finish_transaction
     info 'NodeForge installed; local service checks passed'
     print_node
 }
 uninstall_nodeforge() {
+    # A completed uninstall may leave deliberately preserved unknown directories.
+    # Do not claim or erase them on repeated uninstall.
+    if [[ ! -e $NF_STATE && ! -L $NF_STATE && ! -e $NF_PENDING && ! -L $NF_PENDING ]]; then
+        [[ ! -e $NF_CLI && ! -L $NF_CLI ]] || die 'CLI exists without an ownership state'
+        info 'NodeForge is not installed'
+        return
+    fi
     check_paths
     if [[ -d $NF_PENDING ]]; then
         NF_TRANSACTION=1
@@ -180,17 +232,19 @@ uninstall_nodeforge() {
     fi
     if [[ ! -f $NF_STATE ]]; then info 'NodeForge is not installed'; return; fi
     load_existing
+    runtime_preuninstall
     systemctl stop "$NF_SERVICE"
     systemctl disable "$NF_SERVICE"
     rm -f -- "$NF_UNIT" "$NF_CONFIG" "$NF_BIN" "$NF_LICENSE"
     systemctl daemon-reload
+    runtime_remove
     # Remove only recognized backup files; never recursively erase an unknown tree.
     local directory file
     if [[ -d $NF_DATA_DIR/backups ]]; then
         while IFS= read -r -d '' directory; do
             [[ ! -L $directory && -f $directory/original.json && ! -L $directory/original.json ]] || continue
             jq -e '.owner == "NodeForge" and .schema == 1' "$directory/original.json" >/dev/null || continue
-            for file in xray.json xray unit state.json LICENSE.xray original.json ready user-created; do
+            for file in xray.json xray unit state.json LICENSE.xray original.json ready user-created cli-created; do
                 if [[ -f $directory/$file && ! -L $directory/$file ]]; then rm -f -- "$directory/$file"; fi
             done
             rmdir -- "$directory" 2>/dev/null || warn "Preserved unknown backup contents: $directory"

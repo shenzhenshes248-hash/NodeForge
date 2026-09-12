@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前范围为 Milestone 1：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**状态：M1 已完成 Debian 12 amd64 实机验收；当前源码进入 M2 Phase 1（版本与兼容层基础），尚未提供 CLI、远程 bootstrap 或 update。** 脱敏实机记录见 [docs/VALIDATION_M1_REAL.md](docs/VALIDATION_M1_REAL.md)，M2 边界见 [docs/M2_PHASE1.md](docs/M2_PHASE1.md)。Ubuntu/arm64 为已实现支持范围，尚未实机验证。
+**状态：M1 已完成 Debian 12 amd64 实机验收；M2 Phase 2 已实现本地管理 CLI，等待阶段审核与另行授权的实机验收。尚未提供远程 bootstrap 或 update。** 脱敏实机记录见 [docs/VALIDATION_M1_REAL.md](docs/VALIDATION_M1_REAL.md)，M2 边界见 [docs/M2_PHASE1.md](docs/M2_PHASE1.md)，CLI 设计与本地验证记录见 [docs/M2_PHASE2.md](docs/M2_PHASE2.md)。Ubuntu/arm64 为已实现支持范围，尚未实机验证。
 
 ## 平台
 
@@ -37,6 +37,8 @@ sudo bash install.sh
 VPS 的云安全组和主机防火墙需要允许输出的 TCP 端口。NodeForge 不自动修改任何防火墙，也无法打开云平台安全组。安装成功表示本机服务检查通过；请用外部客户端完成连接验收。
 
 ## 参数覆盖
+
+安装后的常用管理操作见下文「本地管理命令」。这里的环境变量仅用于现有本地 installer，不是 CLI 的参数覆盖接口。
 
 明确设置的环境变量优先于已有配置；没有覆盖时沿用已有身份；仅首次安装使用默认值或随机生成。
 
@@ -104,6 +106,8 @@ sudo env \
 
 ## 卸载
 
+安装完成后也可以使用 `sudo nodeforge uninstall`；它复用下述卸载流程，并移除 CLI 入口及已验证归属的运行时文件。
+
 从本仓库运行：
 
 ```bash
@@ -113,6 +117,32 @@ sudo bash uninstall.sh
 卸载根据安装记录停止、禁用服务，删除 NodeForge 管理的文件及可识别备份，然后移除空目录。未知文件、未知备份内容、系统软件和无关数据保留。发现正式文件被外部修改会停止，避免误删。
 
 仅当服务账户由 NodeForge 创建且检查未发现残余拥有文件时尝试删除账户；从不使用 `userdel -r`，不删除用户数据。无法证明账户闲置时保留并告警；再次安装前需要人工检查这个同名账户。卸载操作本身不是可回滚事务。
+
+## 本地管理命令
+
+本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.2.0-dev`。
+
+| 命令 | 权限 | 实际行为 |
+| --- | --- | --- |
+| `nodeforge`、`nodeforge help`、`nodeforge --help` | 普通用户 | 显示帮助，退出码 0 |
+| `nodeforge version` | 普通用户 | 显示 NodeForge 版本 |
+| `sudo nodeforge status` | root | 验证 schema、文件摘要、节点身份、受管 service 与 MainPID 所属 TCP listener；健康为 0，否则非 0 |
+| `sudo nodeforge info` | root | 显示版本、固定协议、监听地址/端口、受管路径和服务健康情况；不显示节点凭据 |
+| `sudo nodeforge link` | root | 仅向标准输出写一条当前有效的 VLESS 分享链接；不检查外部客户端连通性 |
+| `sudo nodeforge restart` | root | 先校验安装和正式配置，再重启固定的受管 service，并限时验证服务与监听恢复 |
+| `sudo nodeforge uninstall` | root | 复用正式卸载逻辑，清理受管 CLI、Xray、配置和 state，保留未知文件 |
+
+`status/info/link` 共用 `/run/lock/nodeforge.lock` 的共享锁；install/restart/uninstall 使用该锁的排他锁。锁冲突明确返回非 0，不自动重试、提权或修复。只读命令不写配置/state、不创建凭据副本、不恢复 pending 事务；发现 pending 时请使用本地 installer 的既有恢复路径。
+
+所有读取节点状态的 CLI 命令仅支持 schema 1，并核对配置摘要和公私钥关系；损坏、缺字段、未知 schema、身份不一致或非预期服务均拒绝。`status/info` 不输出 UUID、私钥、公钥、shortId 或分享链接；`link` 是显式的凭据输出操作。原有敏感文件权限不放宽，root 以外调用受保护命令会明确失败，不自动 sudo。
+
+本地运行时安装于 `/usr/local/nodeforge/app/releases/<VERSION>/`，入口固定使用这一组模块；重复安装同一份源码保持入口和 runtime 不变。同版本不同内容拒绝原地覆盖，本阶段没有运行时更新或版本切换。卸载先验证固定文件清单及摘要，再逐个删除受管文件；未知内容保留。该清单是本地归属记录，不是签名发行 manifest。
+
+运行时先复制到 final 同一父目录下的 `.pending-<VERSION>`，校验后使用无 copy fallback 的目录 rename。事务回滚可凭精确的创建记录清理本次不完整产物；正常卸载仍要求完整 inventory。关键恢复失败会返回非零并保留 pending，恢复完成后的证据退役失败也会保留完成标记供重试。没有新增 fsync/断电持久性保证，不能保证任何故障都能自动恢复。
+
+CLI 不新增持久日志，诊断写 stderr；`link` 不主动写链接文件，但共用的 URI 编码仍会将公钥放入 `jq --arg`，存在进程参数可见性的继承边界。模块加载发生在锁之前，与卸载并发的新调用可能失败；锁不约束外部配置写入。`nodeforge uninstall` 拒绝 pending，源码卸载入口仍可进入原有恢复流程，详见阶段记录。
+
+退出码统一为 `0` 成功、非 `0` 失败或不健康。`restart` 的配置测试失败时不重启；重启或恢复检查失败后返回非 0，不自动修复或回滚配置。`status` 只描述检查时的本机状态，不保证未来健康或外部网络可用。
 
 ## 测试
 

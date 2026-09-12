@@ -30,7 +30,7 @@ preflight() {
     (( EUID == 0 )) || die 'Run as root (sudo bash install.sh)'
     [[ -d /run/systemd/system ]] || die 'A running systemd system is required'
     command -v systemctl >/dev/null || die 'systemctl is required'
-    check_paths
+    check_paths "${1:-}"
     check_directory_permissions
 }
 check_directory_permissions() {
@@ -53,7 +53,7 @@ check_paths() {
         [[ ! -L $path ]] || die "Refusing symlink: $path"
         [[ ! -e $path || -f $path ]] || die "Expected regular file: $path"
     done
-    if [[ ! -f $NF_STATE && ! -d $NF_PENDING ]]; then
+    if [[ ${1:-} != uninstall && ! -f $NF_STATE && ! -d $NF_PENDING ]]; then
         for path in "$NF_BIN_DIR" "$NF_CONFIG_DIR" "$NF_DATA_DIR" "$NF_UNIT"; do
             [[ ! -e $path ]] || die "Unmanaged path exists: $path"
         done
@@ -65,10 +65,19 @@ install_dependencies() {
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl unzip jq openssl iproute2 python3 util-linux
 }
 acquire_lock() {
+    local mode=${1:-exclusive}
     # /run/lock is root-owned on supported systems; do not follow a planted link.
     [[ ! -L /run/lock/nodeforge.lock ]] || die 'Unsafe lock path'
-    exec {NF_LOCK_FD}>/run/lock/nodeforge.lock
-    flock -n "$NF_LOCK_FD" || die 'Another NodeForge operation is running'
+    if [[ ! -e /run/lock/nodeforge.lock ]]; then
+        ( set -o noclobber; umask 077; : > /run/lock/nodeforge.lock ) 2>/dev/null || die 'Cannot create stable lock file; retry the operation'
+    fi
+    trusted_file /run/lock/nodeforge.lock
+    exec {NF_LOCK_FD}>>/run/lock/nodeforge.lock
+    if [[ $mode == shared ]]; then
+        flock -s -n "$NF_LOCK_FD" || die 'Another NodeForge operation is running'
+    else
+        flock -x -n "$NF_LOCK_FD" || die 'Another NodeForge operation is running'
+    fi
 }
 network_helper() { python3 "$NF_SOURCE/lib/network.py" "$@"; }
 validate_port() { [[ $1 =~ ^[1-9][0-9]{3,4}$ ]] && (( 10#$1 >= 1024 && 10#$1 <= 65535 )); }

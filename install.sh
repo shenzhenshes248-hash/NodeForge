@@ -23,8 +23,8 @@ main() {
         info 'Would install dependencies, verify official Xray, validate target/config, then commit service.'
         return
     fi
-    install_dependencies
     acquire_lock
+    install_dependencies
     init_workspace
     trap cleanup EXIT
     trap 'exit 130' INT
