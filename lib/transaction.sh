@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+atomic_install() {
+    local source=$1 destination=$2 mode=$3 owner=$4 group=$5 temporary
+    temporary=$(mktemp "${destination}.new.XXXXXX") || return 1
+    if ! install -m "$mode" -o "$owner" -g "$group" -- "$source" "$temporary" || ! mv -fT -- "$temporary" "$destination"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+}
+snapshot_files() {
+    local directory=$1
+    cp -p -- "$NF_CONFIG" "$directory/xray.json"
+    cp -p -- "$NF_BIN" "$directory/xray"
+    cp -p -- "$NF_UNIT" "$directory/unit"
+    cp -p -- "$NF_STATE" "$directory/state.json"
+    cp -p -- "$NF_LICENSE" "$directory/LICENSE.xray"
+}
+begin_transaction() {
+    local active=false enabled=false stage
+    systemctl is-active --quiet "$NF_SERVICE" && active=true
+    systemctl is-enabled --quiet "$NF_SERVICE" && enabled=true
+    install -d -m 700 "$NF_DATA_DIR" "$NF_DATA_DIR/backups"
+    stage=$(mktemp -d "$NF_DATA_DIR/.snapshot.XXXXXX")
+    if [[ $NF_EXISTING == 1 ]]; then snapshot_files "$stage"; fi
+    jq -n --argjson existing "$NF_EXISTING" --argjson active "$active" --argjson enabled "$enabled" \
+        '{owner:"NodeForge",schema:1,existing:$existing,active:$active,enabled:$enabled}' > "$stage/original.json"
+    touch "$stage/ready"
+    mv -T -- "$stage" "$NF_PENDING"
+    NF_TRANSACTION=1
+}
+restore_snapshot_file() {
+    local source=$1 destination=$2 temporary
+    require_regular "$source"
+    temporary=$(mktemp "${destination}.restore.XXXXXX") || return 1
+    if ! cp -p -- "$source" "$temporary" || ! mv -fT -- "$temporary" "$destination"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+}
+remove_service_user() {
+    # Never remove home directories or any data owned by the account.
+    if getent passwd nodeforge >/dev/null; then
+        [[ $(id -u nodeforge) != 0 ]] || return 1
+        if ! find / \( -path /proc -o -path /sys -o -path /dev -o -path /run \) -prune -o \
+            -uid "$(id -u nodeforge)" -print -quit > "$NF_WORK/remaining-user-files" 2>/dev/null; then
+            warn 'Cannot prove service account is unused; retaining account'
+            return 1
+        fi
+        if [[ -s $NF_WORK/remaining-user-files ]]; then
+            warn 'Service account still owns files outside the removed installation; retaining account'
+            return 1
+        fi
+        userdel nodeforge || return 1
+    fi
+    if getent group nodeforge >/dev/null; then groupdel nodeforge || return 1; fi
+}
+rollback() {
+    local existing active enabled
+    warn 'Restoring the previous NodeForge installation'
+    [[ ! -L $NF_PENDING && -f $NF_PENDING/ready ]] || return 1
+    require_regular "$NF_PENDING/original.json"
+    jq -e '.owner == "NodeForge" and .schema == 1 and (.existing == 0 or .existing == 1) and
+      (.active|type == "boolean") and (.enabled|type == "boolean")' "$NF_PENDING/original.json" >/dev/null || return 1
+    existing=$(jq -r '.existing' "$NF_PENDING/original.json") || return 1
+    active=$(jq -r '.active' "$NF_PENDING/original.json") || return 1
+    enabled=$(jq -r '.enabled' "$NF_PENDING/original.json") || return 1
+    if [[ $existing == 1 || -f $NF_UNIT ]]; then
+        systemctl daemon-reload || return 1
+        systemctl stop "$NF_SERVICE" || return 1
+    fi
+    if [[ $existing == 1 ]]; then
+        restore_snapshot_file "$NF_PENDING/xray.json" "$NF_CONFIG" || return 1
+        restore_snapshot_file "$NF_PENDING/xray" "$NF_BIN" || return 1
+        restore_snapshot_file "$NF_PENDING/unit" "$NF_UNIT" || return 1
+        restore_snapshot_file "$NF_PENDING/state.json" "$NF_STATE" || return 1
+        restore_snapshot_file "$NF_PENDING/LICENSE.xray" "$NF_LICENSE" || return 1
+    else
+        systemctl disable "$NF_SERVICE" >/dev/null 2>&1 || true
+        rm -f -- "$NF_CONFIG" "$NF_BIN" "$NF_LICENSE" "$NF_UNIT" "$NF_STATE" || return 1
+        if [[ -f $NF_PENDING/user-created ]]; then remove_service_user || return 1; fi
+    fi
+    systemctl daemon-reload || return 1
+    if [[ $existing == 1 ]]; then
+        if [[ $enabled == true ]]; then systemctl enable "$NF_SERVICE" || return 1
+        else systemctl disable "$NF_SERVICE" || return 1; fi
+        if [[ $active == true ]]; then
+            systemctl start "$NF_SERVICE" || return 1
+            systemctl is-active --quiet "$NF_SERVICE" || return 1
+        fi
+    fi
+    rm -rf -- "$NF_PENDING" || return 1
+    NF_TRANSACTION=0
+    if [[ $existing == 0 ]]; then
+        rmdir -- "$NF_BIN_DIR/bin" "$NF_BIN_DIR" "$NF_CONFIG_DIR" "$NF_DATA_DIR/backups" "$NF_DATA_DIR" 2>/dev/null || true
+    fi
+}
+finish_transaction() {
+    local destination
+    destination=$(mktemp -d "$NF_DATA_DIR/backups/install-XXXXXXXX")
+    rmdir -- "$destination"
+    mv -T -- "$NF_PENDING" "$destination"
+    NF_TRANSACTION=0
+}
+install_nodeforge() {
+    check_paths
+    if [[ -d $NF_PENDING ]]; then
+        NF_TRANSACTION=1
+        rollback || die 'Interrupted installation could not be recovered'
+    fi
+    NF_USER_CREATED=false
+    if [[ -f $NF_STATE ]]; then
+        load_existing
+        ensure_service_user
+    else
+        NF_VERSION=$NF_DEFAULT_VERSION
+        NF_TARGET=$NF_DEFAULT_TARGET NF_SNI=$NF_DEFAULT_SNI
+        NF_PORT='' NF_UUID='' NF_SHORT_ID='' NF_LISTEN=0.0.0.0
+        NF_SERVER_IP=''
+    fi
+    local old_port=$NF_PORT old_version=$NF_VERSION
+    NF_VERSION=${NODEFORGE_XRAY_VERSION:-$NF_VERSION}
+    if [[ $NF_EXISTING == 1 && $NF_VERSION == "$old_version" ]]; then
+        NF_CANDIDATE_BIN=$NF_BIN
+        NF_CANDIDATE_LICENSE=$NF_LICENSE
+    else
+        fetch_xray "$NF_VERSION"
+    fi
+    if [[ $NF_EXISTING == 0 ]]; then
+        generate_identity
+        NF_PORT=${NODEFORGE_PORT:-$(choose_port)}
+    fi
+    apply_overrides
+    resolve_server_ip
+    # Bind IPv6 explicitly when publishing an IPv6 endpoint; Linux also accepts
+    # IPv4-mapped connections with its default dual-stack setting.
+    if [[ $NF_SERVER_IP == *:* ]]; then NF_LISTEN=::; else NF_LISTEN=0.0.0.0; fi
+    generate_config "$NF_WORK/candidate.json"
+    test_xray_config "$NF_CANDIDATE_BIN" "$NF_WORK/candidate.json"
+    if [[ $NF_EXISTING == 1 ]] && cmp -s "$NF_CONFIG" "$NF_WORK/candidate.json" && [[ $NF_VERSION == "$old_version" ]]; then
+        begin_transaction
+        # No restart of a healthy service, no key rotation, no implicit upgrade.
+        systemctl enable "$NF_SERVICE"
+        systemctl start "$NF_SERVICE"
+        check_service_health
+        write_state
+        finish_transaction
+        info 'Existing configuration preserved; protected backup created'
+        print_node
+        return
+    fi
+    if [[ $NF_EXISTING == 0 || $NF_PORT != "$old_port" ]]; then
+        port_available "$NF_PORT" || die 'Requested TCP port is already occupied'
+    fi
+    validate_reality_target
+    begin_transaction
+    ensure_service_user
+    install -d -m 755 "$NF_BIN_DIR" "$NF_BIN_DIR/bin"
+    install -d -m 750 -o root -g nodeforge "$NF_CONFIG_DIR"
+    atomic_install "$NF_CANDIDATE_BIN" "$NF_BIN" 755 root root
+    atomic_install "$NF_CANDIDATE_LICENSE" "$NF_LICENSE" 644 root root
+    atomic_install "$NF_WORK/candidate.json" "$NF_CONFIG" 600 nodeforge nodeforge
+    atomic_install "$NF_SOURCE/templates/nodeforge-xray.service" "$NF_UNIT" 644 root root
+    # Validate the exact final path as the service user before starting it.
+    if ! runuser -u nodeforge -- "$NF_BIN" run -test -config "$NF_CONFIG" > "$NF_WORK/final-test.log" 2>&1; then
+        die 'Final configuration is not readable/valid for the service user'
+    fi
+    write_state
+    activate_service
+    finish_transaction
+    info 'NodeForge installed; local service checks passed'
+    print_node
+}
+uninstall_nodeforge() {
+    check_paths
+    if [[ -d $NF_PENDING ]]; then
+        NF_TRANSACTION=1
+        rollback || die 'Recover the pending installation before uninstalling'
+    fi
+    if [[ ! -f $NF_STATE ]]; then info 'NodeForge is not installed'; return; fi
+    load_existing
+    systemctl stop "$NF_SERVICE"
+    systemctl disable "$NF_SERVICE"
+    rm -f -- "$NF_UNIT" "$NF_CONFIG" "$NF_BIN" "$NF_LICENSE"
+    systemctl daemon-reload
+    # Remove only recognized backup files; never recursively erase an unknown tree.
+    local directory file
+    if [[ -d $NF_DATA_DIR/backups ]]; then
+        while IFS= read -r -d '' directory; do
+            [[ ! -L $directory && -f $directory/original.json && ! -L $directory/original.json ]] || continue
+            jq -e '.owner == "NodeForge" and .schema == 1' "$directory/original.json" >/dev/null || continue
+            for file in xray.json xray unit state.json LICENSE.xray original.json ready user-created; do
+                if [[ -f $directory/$file && ! -L $directory/$file ]]; then rm -f -- "$directory/$file"; fi
+            done
+            rmdir -- "$directory" 2>/dev/null || warn "Preserved unknown backup contents: $directory"
+        done < <(find "$NF_DATA_DIR/backups" -mindepth 1 -maxdepth 1 -type d -name 'install-*' -print0)
+    fi
+    rm -f -- "$NF_STATE"
+    rmdir -- "$NF_BIN_DIR/bin" "$NF_BIN_DIR" "$NF_CONFIG_DIR" "$NF_DATA_DIR/backups" "$NF_DATA_DIR" 2>/dev/null || warn 'Preserved nonempty directories containing unknown files'
+    if [[ $NF_USER_CREATED == true ]]; then
+        remove_service_user || warn 'Could not remove service account; no user data was deleted'
+    fi
+    info 'NodeForge removed; distribution packages and unrelated data preserved'
+}

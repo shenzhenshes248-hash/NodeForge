@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+case $1 in
+    uuid) printf '123e4567-e89b-42d3-a456-426614174000\n' ;;
+    x25519) printf 'PrivateKey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nPassword (PublicKey): BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\nHash32: ignored\n' ;;
+    run)
+        [[ ! -f $NF_TEST_ROOT/fail-config ]] || exit 23
+        [[ $2 == -test && $3 == -config ]] || exit 1
+        jq -e '.inbounds[0].settings.clients[0].flow == "xtls-rprx-vision"' "$4" >/dev/null ;;
+    *) exit 1 ;;
+esac

@@ -1,0 +1,4 @@
+external-sources=true
+# Modules intentionally exchange non-exported NF_* state; exporting secrets to
+# subprocess environments merely to satisfy unused-variable lint is undesirable.
+disable=SC2034

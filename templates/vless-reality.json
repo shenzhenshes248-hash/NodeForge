@@ -1,0 +1,16 @@
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [{
+    "tag": "vless-reality",
+    "listen": "0.0.0.0",
+    "port": 20000,
+    "protocol": "vless",
+    "settings": {"clients": [{"id": "", "flow": "xtls-rprx-vision"}], "decryption": "none"},
+    "streamSettings": {
+      "network": "raw",
+      "security": "reality",
+      "realitySettings": {"show": false, "target": "", "xver": 0, "serverNames": [], "privateKey": "", "shortIds": []}
+    }
+  }],
+  "outbounds": [{"tag": "direct", "protocol": "freedom"}]
+}
