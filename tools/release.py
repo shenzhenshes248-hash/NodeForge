@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""Local NodeForge bundle creation and detached Ed25519 manifest verification."""
+import argparse
+import gzip
+import hashlib
+import io
+import json
+import re
+import subprocess
+import sys
+import tarfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+TRUST_ANCHOR = ROOT / 'trust/release-ed25519.pub'
+ED25519_SPKI = bytes.fromhex('302a300506032b6570032100')
+
+
+def openssl(*args):
+    return subprocess.run(['openssl', *map(str, args)], check=True, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30).stdout
+
+
+def regular(path):
+    path = Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('Expected a regular file')
+    return path
+
+
+def digest(path):
+    with regular(path).open('rb') as stream:
+        result = hashlib.sha256()
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            result.update(block)
+    return result.hexdigest()
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('Duplicate manifest key')
+        result[key] = value
+    return result
+
+
+def manifest_data(raw):
+    data = json.loads(raw, object_pairs_hook=unique_object)
+    if not isinstance(data, dict) or set(data) != {'schema', 'version', 'artifact', 'sha256'}:
+        raise ValueError('Invalid manifest fields')
+    if type(data['schema']) is not int or data['schema'] != 1:
+        raise ValueError('Unsupported manifest schema')
+    if not isinstance(data['version'], str) or not re.fullmatch(
+            r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev)?', data['version']):
+        raise ValueError('Invalid manifest version')
+    if data['artifact'] != f"nodeforge-{data['version']}.tar.gz":
+        raise ValueError('Invalid artifact filename')
+    if not isinstance(data['sha256'], str) or not re.fullmatch('[a-f0-9]{64}', data['sha256']):
+        raise ValueError('Invalid artifact digest')
+    return data
+
+
+def build(output):
+    # Reuse the canonical version loader and runtime inventory; never run installer.
+    script = ('set -Eeuo pipefail; NF_SOURCE=$1; source "$NF_SOURCE/lib/common.sh"; '
+              'load_modules; printf "%s\\n" "$NF_NODEFORGE_VERSION"; runtime_files')
+    lines = subprocess.run(['bash', '-c', script, 'bash', ROOT.as_posix()], check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30).stdout.decode().splitlines()
+    version, *files = lines
+    files += ['install.sh', 'uninstall.sh', 'LICENSE', 'README.md', 'tools/release.py',
+              'docs/M2_PHASE3.md', 'trust/release-ed25519.pub']
+    payloads = []
+    for name in files:
+        path = ROOT / name
+        if path.resolve() != path.absolute():
+            raise ValueError('Bundle input must not use symlinks')
+        payloads.append((name, regular(path).read_bytes()))
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    artifact = output / f'nodeforge-{version}.tar.gz'
+    with artifact.open('xb') as target, gzip.GzipFile(filename='', mode='wb', fileobj=target, mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode='w', format=tarfile.USTAR_FORMAT) as archive:
+            for name, content in payloads:
+                member = tarfile.TarInfo(f'nodeforge-{version}/{name}')
+                member.size = len(content)
+                member.mode = 0o755 if name.endswith('.sh') else 0o644
+                archive.addfile(member, io.BytesIO(content))
+    manifest = output / 'manifest.json'
+    manifest.write_bytes((json.dumps(dict(schema=1, version=version, artifact=artifact.name,
+                                         sha256=digest(artifact)), sort_keys=True, indent=2) + '\n').encode())
+    return artifact, manifest
+
+
+def ed25519_public(der):
+    if len(der) != 44 or not der.startswith(ED25519_SPKI):
+        raise ValueError('An Ed25519 key is required')
+
+
+def sign(manifest, private_key, signature):
+    manifest, private_key = regular(manifest), regular(private_key)
+    # Signing secrets belong outside both the source tree and bundle output directory.
+    if any(private_key.resolve().is_relative_to(parent.resolve()) for parent in (ROOT, manifest.parent)):
+        raise ValueError('Private key must be outside source and release directories')
+    manifest_data(manifest.read_bytes())
+    ed25519_public(openssl('pkey', '-in', private_key, '-passin', 'pass:', '-pubout', '-outform', 'DER'))
+    signature_bytes = openssl('pkeyutl', '-sign', '-rawin', '-inkey', private_key,
+                              '-passin', 'pass:', '-in', manifest)
+    if len(signature_bytes) != 64:
+        raise ValueError('Invalid Ed25519 signature')
+    with Path(signature).open('xb') as target:
+        target.write(signature_bytes)
+
+
+def verify(artifact, manifest, signature):
+    # Production trust comes from this trusted verifier checkout, never the release input.
+    return _verify_with_key(artifact, manifest, signature, TRUST_ANCHOR)
+
+
+def _verify_with_key(artifact, manifest, signature, public_key):
+    # Internal injection point for isolated tests; not exposed by the CLI.
+    artifact, manifest, signature, public_key = map(regular, (artifact, manifest, signature, public_key))
+    ed25519_public(openssl('pkey', '-pubin', '-in', public_key, '-outform', 'DER'))
+    if signature.stat().st_size != 64:
+        raise ValueError('Invalid signature length')
+    # Authenticate the original bytes before parsing any untrusted manifest fields.
+    openssl('pkeyutl', '-verify', '-rawin', '-pubin', '-inkey', public_key,
+            '-in', manifest, '-sigfile', signature)
+    data = manifest_data(manifest.read_bytes())
+    if artifact.name != data['artifact'] or digest(artifact) != data['sha256']:
+        raise ValueError('Artifact verification failed')
+    # Inspect only; verification never extracts or executes the archive.
+    prefix = f"nodeforge-{data['version']}/"
+    with tarfile.open(artifact, 'r:gz') as archive:
+        seen = set()
+        for member in archive.getmembers():
+            relative = member.name.removeprefix(prefix)
+            if (not member.name.startswith(prefix) or not member.isfile() or member.name in seen
+                    or any(part in ('', '.', '..') for part in relative.split('/')) or '\\' in relative):
+                raise ValueError('Invalid bundle member')
+            seen.add(member.name)
+        member = archive.getmember(prefix + 'VERSION')
+        if member.size > 64 or archive.extractfile(member).read().decode().rstrip('\n') != data['version']:
+            raise ValueError('Bundle VERSION does not match manifest')
+    return data['version']
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest='command', required=True)
+    commands.add_parser('build').add_argument('--output-dir', required=True, type=Path)
+    signing = commands.add_parser('sign')
+    signing.add_argument('--manifest', required=True, type=Path)
+    signing.add_argument('--private-key', required=True, type=Path)
+    signing.add_argument('--signature', required=True, type=Path)
+    verification = commands.add_parser('verify')
+    for option in ('artifact', 'manifest', 'signature'):
+        verification.add_argument('--' + option, required=True, type=Path)
+    args = parser.parse_args()
+    try:
+        if args.command == 'build':
+            artifact, manifest = build(args.output_dir)
+            print(f'Built: {artifact}\nManifest: {manifest}')
+        elif args.command == 'sign':
+            sign(args.manifest, args.private_key, args.signature)
+            print('Manifest signed')
+        else:
+            version = verify(args.artifact, args.manifest, args.signature)
+            print(f'Verified: NodeForge {version}')
+    except (OSError, ValueError, TypeError, KeyError, UnicodeError, tarfile.TarError, subprocess.SubprocessError):
+        print('Release operation failed; no verified release (details suppressed)', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

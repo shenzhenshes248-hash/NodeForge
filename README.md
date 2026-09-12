@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前范围为 Milestone 1：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**状态：M1 已完成 Debian 12 amd64 实机验收；M2 Phase 2 已实现本地管理 CLI，等待阶段审核与另行授权的实机验收。尚未提供远程 bootstrap 或 update。** 脱敏实机记录见 [docs/VALIDATION_M1_REAL.md](docs/VALIDATION_M1_REAL.md)，M2 边界见 [docs/M2_PHASE1.md](docs/M2_PHASE1.md)，CLI 设计与本地验证记录见 [docs/M2_PHASE2.md](docs/M2_PHASE2.md)。Ubuntu/arm64 为已实现支持范围，尚未实机验证。
+**状态：M1 已完成 Debian 12 amd64 实机验收；M2 Phase 2 COMPLETE；Phase 3 提供本地 release bundle 与 Ed25519 signed manifest，等待审核。尚未提供远程 bootstrap 或 update。** 发行格式和命令见 [docs/M2_PHASE3.md](docs/M2_PHASE3.md)。脱敏实机记录见 [docs/VALIDATION_M1_REAL.md](docs/VALIDATION_M1_REAL.md)，M2 边界见 [docs/M2_PHASE1.md](docs/M2_PHASE1.md)，CLI 设计与本地验证记录见 [docs/M2_PHASE2.md](docs/M2_PHASE2.md)。Ubuntu/arm64 为已实现支持范围，尚未实机验证。
 
 ## 平台
 
