@@ -114,18 +114,18 @@ install_nodeforge() {
         load_existing
         ensure_service_user
     else
-        NF_VERSION=$NF_DEFAULT_VERSION
+        NF_XRAY_VERSION=$NF_DEFAULT_XRAY_VERSION
         NF_TARGET=$NF_DEFAULT_TARGET NF_SNI=$NF_DEFAULT_SNI
         NF_PORT='' NF_UUID='' NF_SHORT_ID='' NF_LISTEN=0.0.0.0
         NF_SERVER_IP=''
     fi
-    local old_port=$NF_PORT old_version=$NF_VERSION
-    NF_VERSION=${NODEFORGE_XRAY_VERSION:-$NF_VERSION}
-    if [[ $NF_EXISTING == 1 && $NF_VERSION == "$old_version" ]]; then
+    local old_port=$NF_PORT old_version=$NF_XRAY_VERSION
+    NF_XRAY_VERSION=${NODEFORGE_XRAY_VERSION:-$NF_XRAY_VERSION}
+    if [[ $NF_EXISTING == 1 && $NF_XRAY_VERSION == "$old_version" ]]; then
         NF_CANDIDATE_BIN=$NF_BIN
         NF_CANDIDATE_LICENSE=$NF_LICENSE
     else
-        fetch_xray "$NF_VERSION"
+        fetch_xray "$NF_XRAY_VERSION"
     fi
     if [[ $NF_EXISTING == 0 ]]; then
         generate_identity
@@ -138,7 +138,7 @@ install_nodeforge() {
     if [[ $NF_SERVER_IP == *:* ]]; then NF_LISTEN=::; else NF_LISTEN=0.0.0.0; fi
     generate_config "$NF_WORK/candidate.json"
     test_xray_config "$NF_CANDIDATE_BIN" "$NF_WORK/candidate.json"
-    if [[ $NF_EXISTING == 1 ]] && cmp -s "$NF_CONFIG" "$NF_WORK/candidate.json" && [[ $NF_VERSION == "$old_version" ]]; then
+    if [[ $NF_EXISTING == 1 ]] && cmp -s "$NF_CONFIG" "$NF_WORK/candidate.json" && [[ $NF_XRAY_VERSION == "$old_version" ]]; then
         begin_transaction
         # No restart of a healthy service, no key rotation, no implicit upgrade.
         systemctl enable "$NF_SERVICE"

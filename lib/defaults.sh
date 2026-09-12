@@ -11,7 +11,7 @@ init_paths() {
     NF_CONFIG=$NF_CONFIG_DIR/xray.json
     NF_STATE=$NF_DATA_DIR/state.json
     NF_PENDING=$NF_DATA_DIR/pending
-    NF_DEFAULT_VERSION=v26.9.9
+    NF_DEFAULT_XRAY_VERSION=v26.9.9
     NF_DEFAULT_TARGET=www.microsoft.com:443
     NF_DEFAULT_SNI=www.microsoft.com
     NF_SERVICE=nodeforge-xray.service

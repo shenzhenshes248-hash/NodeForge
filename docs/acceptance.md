@@ -4,13 +4,13 @@
 
 本地环境为 Windows + Git Bash。已执行 ShellCheck、Bash 语法、fixture 安装/回滚/卸载测试以及 Python 本地 socket/参数测试。已从官方 Release 下载 Windows amd64 Xray v26.9.9 并核对官方 SHA-256，使用实际 CLI 生成 UUID/X25519 密钥并验证生成的 VLESS/RAW/REALITY/Vision 配置。
 
-以上不能证明 Linux ELF 二进制、systemd sandbox、Linux 文件属主或外部连接正确。Linux 集成脚本与 CI 已提供，尚未在本次本地环境执行。以下实机矩阵均**待执行**：
+以上不能证明 Linux ELF 二进制、systemd sandbox、Linux 文件属主或外部连接正确。Linux 集成脚本与 CI 已提供，尚未在本次本地环境执行。后续 Debian 12 amd64 实机验收已完成，见 [脱敏记录](VALIDATION_M1_REAL.md)。下表区分实机覆盖范围：
 
 默认 target 的官方 `xray tls ping` 本地诊断观察到 TLS 1.3 握手成功，但本地 DNS 返回了测试保留地址（代理环境），不能计为 VPS 上的公网地址、证书和 HTTP/2 完整验收；安装器会拒绝此类非公网 target 解析结果。
 
 | 系统 | 架构 | 首次安装 / 重装 / 重启 / 卸载 | 外部客户端连接 |
 | --- | --- | --- | --- |
-| Debian 12 | amd64 | 待执行 | 待执行 |
+| Debian 12 | amd64 | PASS | PASS（用户人工确认） |
 | Debian 12 | arm64 | 待执行 | 待执行 |
 | Ubuntu 24.04 | amd64 | 待执行 | 待执行 |
 | Ubuntu 24.04 | arm64 | 待执行 | 待执行 |

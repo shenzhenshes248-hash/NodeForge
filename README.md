@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前范围为 Milestone 1：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**状态：实现与隔离测试已完成，真实 Linux VPS 验收待执行。不要把通过模拟测试等同于生产环境验收。** 详细检查表见 [docs/acceptance.md](docs/acceptance.md)。
+**状态：M1 已完成 Debian 12 amd64 实机验收；当前源码进入 M2 Phase 1（版本与兼容层基础），尚未提供 CLI、远程 bootstrap 或 update。** 脱敏实机记录见 [docs/VALIDATION_M1_REAL.md](docs/VALIDATION_M1_REAL.md)，M2 边界见 [docs/M2_PHASE1.md](docs/M2_PHASE1.md)。Ubuntu/arm64 为已实现支持范围，尚未实机验证。
 
 ## 平台
 
@@ -13,7 +13,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 | 系统 | Debian 12+、Ubuntu 22.04+，需运行 systemd |
 | CPU | x86_64 / amd64；aarch64 / arm64 |
 | 核心版本 | 默认固定 `v26.9.9`，不自动跟随 latest |
-| 基础验收目标 | 干净 Debian 12、Ubuntu 24.04 VPS |
+| 已完成实机验收 | Debian 12 amd64；其他系统/架构待验收 |
 
 不支持的系统或架构在安装依赖、创建用户和写入系统文件之前停止。Windows/macOS 可以编辑源码；不能安装服务。新发行版能通过版本检查不代表已经完成实机兼容验收。
 

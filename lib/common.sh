@@ -7,12 +7,13 @@ warn() { log WARN "$*"; }
 die() { log ERROR "$*"; exit 1; }
 load_modules() {
     local module
-    for module in defaults system xray reality config service transaction share; do
+    for module in defaults version state system xray reality config service transaction share; do
         # Modules are linted individually by tests/run.sh.
         # shellcheck disable=SC1090,SC1091
         source "$NF_SOURCE/lib/$module.sh"
     done
     init_paths
+    load_nodeforge_version
 }
 init_workspace() { NF_WORK=$(mktemp -d); chmod 700 "$NF_WORK"; }
 cleanup() {

@@ -5,7 +5,7 @@ validate_uuid() { [[ $1 =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-f
 validate_short_id() { [[ $1 =~ ^[0-9a-f]{16}$ ]]; }
 load_existing() {
     require_regular "$NF_STATE"
-    jq -e '.owner == "NodeForge" and .schema == 1 and (.user_created | type == "boolean")' "$NF_STATE" >/dev/null || die 'Invalid ownership record'
+    validate_legacy_state_record "$NF_STATE" || die 'Invalid ownership record'
     local path expected actual
     for path in "$NF_CONFIG" "$NF_BIN" "$NF_UNIT" "$NF_LICENSE"; do require_regular "$path"; done
     expected=$(jq -r '.config_sha256' "$NF_STATE") actual=$(sha256_file "$NF_CONFIG")
@@ -16,7 +16,7 @@ load_existing() {
     [[ $expected == "$actual" ]] || die 'Service unit changed outside NodeForge'
     expected=$(jq -r '.license_sha256' "$NF_STATE") actual=$(sha256_file "$NF_LICENSE")
     [[ $expected == "$actual" ]] || die 'Installed Xray license changed outside NodeForge'
-    NF_VERSION=$(jq -er '.version' "$NF_STATE")
+    NF_XRAY_VERSION=$(jq -er '.version' "$NF_STATE")
     NF_PUBLIC_KEY=$(jq -er '.public_key' "$NF_STATE")
     NF_SERVER_IP=$(jq -er '.server_ip' "$NF_STATE")
     NF_USER_CREATED=$(jq -r '.user_created' "$NF_STATE")
@@ -63,7 +63,7 @@ generate_config() {
     jq -e . "$output" >/dev/null
 }
 write_state() {
-    jq -n --arg version "$NF_VERSION" --arg public "$NF_PUBLIC_KEY" --arg ip "$NF_SERVER_IP" \
+    jq -n --arg version "$NF_XRAY_VERSION" --arg public "$NF_PUBLIC_KEY" --arg ip "$NF_SERVER_IP" \
         --arg config "$(sha256_file "$NF_CONFIG")" --arg binary "$(sha256_file "$NF_BIN")" \
         --arg unit "$(sha256_file "$NF_UNIT")" --arg license "$(sha256_file "$NF_LICENSE")" --argjson user "$NF_USER_CREATED" \
         '{owner:"NodeForge",schema:1,version:$version,public_key:$public,server_ip:$ip,user_created:$user,
