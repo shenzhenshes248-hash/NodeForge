@@ -87,8 +87,12 @@ def validate_state(state_path, config_path, template_path, derive=False):
             raise ValueError('public key mismatch')
 
 
-def listener(lines, listen, port, pid):
+def listener(lines, listen, port, pid, family=None):
     expected = ipaddress.ip_address(listen)
+    family = expected.version if family is None else int(family)
+    dual_stack = expected == ipaddress.ip_address('0.0.0.0') and family == 6
+    if family != expected.version and not dual_stack:
+        raise ValueError('listener family')
     found = False
     for line in lines.splitlines():
         fields = line.split()
@@ -98,9 +102,12 @@ def listener(lines, listen, port, pid):
         if actual_port != port:
             raise ValueError('listener port')
         address = address.strip('[]')
-        # ss uses * for a wildcard; callers query the expected address family.
-        if address != '*' and ipaddress.ip_address(address) != expected:
+        # A cross-family wildcard is valid only with per-socket IPv4 support.
+        target = ipaddress.ip_address('::') if dual_stack else expected
+        if address != '*' and ipaddress.ip_address(address) != target:
             raise ValueError('listener address')
+        if dual_stack and [field for field in fields[5:] if field.startswith('v6only:')] != ['v6only:0']:
+            raise ValueError('listener is not dual-stack')
         pids = re.findall(r'\bpid=([0-9]+),', ' '.join(fields[5:]))
         if not pids or any(value != pid for value in pids):
             raise ValueError('listener owner')
@@ -121,7 +128,7 @@ def main():
     elif sys.argv[1] in ('state', 'link'):
         validate_state(*sys.argv[2:5], derive=True)
     elif sys.argv[1] == 'listener':
-        listener(sys.stdin.read(), *sys.argv[2:5])
+        listener(sys.stdin.read(), *sys.argv[2:])
     else:
         raise ValueError('operation')
 

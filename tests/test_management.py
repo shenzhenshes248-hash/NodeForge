@@ -108,6 +108,21 @@ class ManagementTests(unittest.TestCase):
             with self.subTest(line=line), self.assertRaises(ValueError):
                 management.listener(line, '0.0.0.0', '23456', '123')
 
+    def test_listener_ipv4_via_dual_stack(self):
+        for address in ('*', '[::]'):
+            with self.subTest(address=address):
+                management.listener(f'LISTEN 0 128 {address}:23456 *:* users:(("xray",pid=123,fd=3)) v6only:0',
+                                    '0.0.0.0', '23456', '123', '6')
+
+    def test_listener_dual_stack_requires_ipv4_support_and_owner(self):
+        for address, owner, attributes in [
+                ('[::]', '123', ''), ('[::]', '123', 'v6only:1'),
+                ('[::]', '123', 'v6only:0 v6only:1'),
+                ('[::1]', '123', 'v6only:0'), ('*', '456', 'v6only:0')]:
+            with self.subTest(address=address, owner=owner, attributes=attributes), self.assertRaises(ValueError):
+                management.listener(f'LISTEN 0 128 {address}:23456 *:* users:(("xray",pid={owner},fd=3)) {attributes}',
+                                    '0.0.0.0', '23456', '123', '6')
+
     def test_directory_publish_renames_sibling(self):
         parent = Path(self.directory.name)
         source, destination = parent / '.pending-v1', parent / 'v1'

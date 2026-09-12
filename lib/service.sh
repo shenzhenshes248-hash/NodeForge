@@ -40,7 +40,7 @@ managed_service_loaded() {
     [[ $load == loaded && $fragment == "$NF_UNIT" && -z $dropins && $reload == no ]]
 }
 managed_service_healthy() {
-    local active sub pid executable sockets family=-4 after
+    local active sub pid executable sockets family=4 after
     managed_service_loaded || return 1
     active=$(timeout 3 systemctl show "$NF_SERVICE" -p ActiveState --value 2>/dev/null) || return 1
     sub=$(timeout 3 systemctl show "$NF_SERVICE" -p SubState --value 2>/dev/null) || return 1
@@ -48,9 +48,15 @@ managed_service_healthy() {
     [[ $active == active && $sub == running && $pid =~ ^[1-9][0-9]*$ ]] || return 1
     executable=$(readlink -e -- "/proc/$pid/exe") || return 1
     [[ $executable == "$NF_BIN" ]] || return 1
-    [[ $NF_LISTEN != :: ]] || family=-6
-    sockets=$(timeout 3 ss "$family" -H -ltnp "sport = :$NF_PORT" 2>/dev/null) || return 1
-    printf '%s\n' "$sockets" | python3 "$NF_SOURCE/lib/management.py" listener "$NF_LISTEN" "$NF_PORT" "$pid" 2>/dev/null || return 1
+    [[ $NF_LISTEN != :: ]] || family=6
+    sockets=$(timeout 3 ss "-$family" -H -ltnp "sport = :$NF_PORT" 2>/dev/null) || return 1
+    # Linux may expose an IPv4 wildcard as an IPv6 dual-stack socket.
+    # Require the socket's v6only:0 attribute, not the host-wide default.
+    if [[ $NF_LISTEN == 0.0.0.0 && -z $sockets ]]; then
+        family=6
+        sockets=$(timeout 3 ss -6 -H -ltnpe "sport = :$NF_PORT" 2>/dev/null) || return 1
+    fi
+    printf '%s\n' "$sockets" | python3 "$NF_SOURCE/lib/management.py" listener "$NF_LISTEN" "$NF_PORT" "$pid" "$family" 2>/dev/null || return 1
     # Fail closed if the process changed while inspecting its listener.
     after=$(timeout 3 systemctl show "$NF_SERVICE" -p MainPID --value 2>/dev/null) || return 1
     [[ $after == "$pid" ]] && timeout 3 systemctl is-active --quiet "$NF_SERVICE" 2>/dev/null

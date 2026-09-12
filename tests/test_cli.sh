@@ -85,6 +85,16 @@ rm "$NF_TEST_ROOT/fail-restart"
 touch "$NF_TEST_ROOT/missing-listener"
 assert_fails cli_main restart
 rm "$NF_TEST_ROOT/missing-listener"
+touch "$NF_TEST_ROOT/dual-stack"
+cli_main status > "$NF_WORK/dual-status"
+cli_main info > "$NF_WORK/dual-info"
+cli_main restart > "$NF_WORK/dual-restart"
+for failure in wrong-pid v6-only; do
+    touch "$NF_TEST_ROOT/$failure"
+    assert_fails cli_main status
+    rm "$NF_TEST_ROOT/$failure"
+done
+rm "$NF_TEST_ROOT/dual-stack"
 assert_eq "$config_hash" "$(sha256_file "$NF_CONFIG")"
 assert_eq "$state_hash" "$(sha256_file "$NF_STATE")"
 assert_fails grep -E '^(restart|stop|disable|show) .*other' "$NF_TEST_ROOT/systemctl.calls"

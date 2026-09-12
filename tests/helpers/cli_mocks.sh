@@ -44,6 +44,13 @@ ss() {
     local pid=12345 address=$NF_LISTEN
     [[ ! -f $NF_TEST_ROOT/wrong-pid ]] || pid=54321
     [[ ! -f $NF_TEST_ROOT/wrong-address ]] || address=127.0.0.1
+    if [[ -f $NF_TEST_ROOT/dual-stack ]]; then
+        [[ $1 != -4 ]] || return 0
+        local v6only=0
+        [[ ! -f $NF_TEST_ROOT/v6-only ]] || v6only=1
+        printf 'LISTEN 0 128 [::]:%s *:* users:(("xray",pid=%s,fd=3)) v6only:%s\n' "$NF_PORT" "$pid" "$v6only"
+        return
+    fi
     printf 'LISTEN 0 128 %s:%s 0.0.0.0:* users:(("xray",pid=%s,fd=3))\n' "$address" "$NF_PORT" "$pid"
 }
 timeout() { shift; "$@"; }
