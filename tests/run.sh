@@ -17,4 +17,5 @@ done
 "${PYTHON:-python3}" tests/test_management.py
 "${PYTHON:-python3}" tests/test_release.py
 "${PYTHON:-python3}" tests/test_bootstrap.py
+"${PYTHON:-python3}" tests/test_update.py
 printf 'PASS: ShellCheck, bash syntax, %s isolated suites\n' "$count"

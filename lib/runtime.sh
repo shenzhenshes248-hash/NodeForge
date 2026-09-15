@@ -6,7 +6,8 @@ runtime_files() {
     printf '%s\n' VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service \
         lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh \
         lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh \
-        lib/runtime.sh lib/cli.sh lib/network.py lib/management.py
+        lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py \
+        tools/release.py trust/release-ed25519.pub
 }
 runtime_paths() {
     NF_APP=$NF_BIN_DIR/app
@@ -30,7 +31,7 @@ trusted_file() {
 runtime_check_paths() {
     local path
     runtime_paths
-    for path in /usr /usr/local "$(dirname "$NF_CLI")" "$NF_BIN_DIR" "$NF_APP" "$NF_APP/releases" "$NF_RUNTIME" "$NF_RUNTIME/lib" "$NF_RUNTIME/templates" "$NF_RUNTIME_STAGE" "$NF_RUNTIME_STAGE/lib" "$NF_RUNTIME_STAGE/templates"; do
+    for path in /usr /usr/local "$(dirname "$NF_CLI")" "$NF_BIN_DIR" "$NF_APP" "$NF_APP/releases" "$NF_RUNTIME" "$NF_RUNTIME/lib" "$NF_RUNTIME/templates" "$NF_RUNTIME/tools" "$NF_RUNTIME/trust" "$NF_RUNTIME_STAGE" "$NF_RUNTIME_STAGE/lib" "$NF_RUNTIME_STAGE/templates" "$NF_RUNTIME_STAGE/tools" "$NF_RUNTIME_STAGE/trust"; do
         [[ ! -L $path && ( ! -e $path || -d $path ) ]] || die 'Unsafe CLI installation path'
         if [[ -d $path ]]; then trusted_directory "$path"; fi
     done
@@ -70,7 +71,7 @@ runtime_preinstall() {
     fi
 }
 install_cli_runtime() {
-    local file expected actual
+    local file
     runtime_check_paths
     if [[ -e $NF_RUNTIME ]]; then
         ( runtime_preinstall ) || return 1
@@ -81,7 +82,14 @@ install_cli_runtime() {
     runtime_intent > "$NF_WORK/cli-intent" || return 1
     atomic_install "$NF_WORK/cli-intent" "$NF_PENDING/cli-created" 600 root root || return 1
     install -d -m 755 "$NF_APP" "$NF_APP/releases" "$(dirname "$NF_CLI")" || return 1
-    install -d -m 755 "$NF_RUNTIME_STAGE" "$NF_RUNTIME_STAGE/lib" "$NF_RUNTIME_STAGE/templates" || return 1
+    runtime_stage || return 1
+    runtime_publish || return 1
+    runtime_launcher > "$NF_WORK/cli-entry" || return 1
+    atomic_install "$NF_WORK/cli-entry" "$NF_CLI" 755 root root || return 1
+}
+runtime_stage() {
+    local file expected actual
+    install -d -m 755 "$NF_RUNTIME_STAGE" "$NF_RUNTIME_STAGE/lib" "$NF_RUNTIME_STAGE/templates" "$NF_RUNTIME_STAGE/tools" "$NF_RUNTIME_STAGE/trust" || return 1
     while IFS= read -r file; do
         ( require_regular "$NF_SOURCE/$file" ) || return 1
         install -m 644 -o root -g root "$NF_SOURCE/$file" "$NF_RUNTIME_STAGE/$file" || return 1
@@ -92,9 +100,6 @@ install_cli_runtime() {
     expected=$(runtime_inventory "$NF_SOURCE") || return 1
     actual=$(runtime_inventory "$NF_RUNTIME_STAGE") || return 1
     [[ $actual == "$expected" ]] || return 1
-    runtime_publish || return 1
-    runtime_launcher > "$NF_WORK/cli-entry" || return 1
-    atomic_install "$NF_WORK/cli-entry" "$NF_CLI" 755 root root || return 1
 }
 runtime_publish() {
     python3 "$NF_SOURCE/lib/management.py" rename-directory "$NF_RUNTIME_STAGE" "$NF_RUNTIME"
@@ -106,7 +111,7 @@ runtime_intent() {
 # Only used with an exact, protected creation record written before mkdir/copy.
 # No paths are read from that record. Installed uninstall still uses inventory.
 runtime_rollback_cleanup() {
-    local root file
+    local root file keep_cli=${1:-no}
     runtime_paths
     ( runtime_check_paths; trusted_file "$NF_PENDING/cli-created" ) || return 1
     cmp -s <(runtime_intent) "$NF_PENDING/cli-created" || return 1
@@ -118,7 +123,7 @@ runtime_rollback_cleanup() {
             fi
         done < <(runtime_files; printf '%s\n' .inventory)
     done
-    if [[ -e $NF_CLI ]]; then
+    if [[ $keep_cli != keep-cli && -e $NF_CLI ]]; then
         ( trusted_file "$NF_CLI" ) || return 1
         cmp -s <(runtime_launcher) "$NF_CLI" || return 1
         rm -f -- "$NF_CLI" || return 1
@@ -126,12 +131,13 @@ runtime_rollback_cleanup() {
     for root in "$NF_RUNTIME_STAGE" "$NF_RUNTIME"; do
         [[ -d $root ]] || continue
         while IFS= read -r file; do rm -f -- "$root/$file" || return 1; done < <(runtime_files; printf '%s\n' .inventory)
-        for file in lib templates; do
+        for file in lib templates tools trust; do
             if [[ -d $root/$file ]]; then rmdir -- "$root/$file" || return 1; fi
         done
         # Unknown contents are not erased; they keep recovery pending.
         rmdir -- "$root" || return 1
     done
+    [[ $keep_cli != keep-cli ]] || return 0
     for root in "$NF_APP/releases" "$NF_APP"; do
         if [[ -d $root ]]; then rmdir -- "$root" || return 1; fi
     done
@@ -140,6 +146,7 @@ runtime_remove() {
     local file
     runtime_check_paths
     if [[ -e $NF_RUNTIME ]]; then runtime_validate; fi
+    update_remove_trust || return 1
     if [[ -e $NF_CLI ]]; then
         trusted_file "$NF_CLI"
         cmp -s <(runtime_launcher) "$NF_CLI" || die 'Unmanaged CLI entry'
@@ -149,7 +156,7 @@ runtime_remove() {
         # Delete only validated, explicitly named files; preserve unknown contents.
         while IFS= read -r file; do rm -f -- "$NF_RUNTIME/$file" || return 1; done < <(runtime_files)
         rm -f -- "$NF_RUNTIME/.inventory" || return 1
-        rmdir -- "$NF_RUNTIME/lib" "$NF_RUNTIME/templates" "$NF_RUNTIME" 2>/dev/null || warn 'Preserved unknown CLI runtime files'
+        rmdir -- "$NF_RUNTIME/lib" "$NF_RUNTIME/templates" "$NF_RUNTIME/tools" "$NF_RUNTIME/trust" "$NF_RUNTIME" 2>/dev/null || warn 'Preserved unknown CLI runtime files'
     fi
     rmdir -- "$NF_APP/releases" "$NF_APP" 2>/dev/null || true
 }

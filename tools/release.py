@@ -70,7 +70,7 @@ def source_inventory():
     version, *files = lines
     files += ['install.sh', 'uninstall.sh', 'LICENSE', 'README.md', 'tools/release.py',
               'docs/M2_PHASE3.md', 'trust/release-ed25519.pub']
-    return version, files
+    return version, list(dict.fromkeys(files))
 
 
 def build(output):
