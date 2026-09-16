@@ -66,6 +66,22 @@ xray_update_cleanup() {
     rm -rf -- "$NF_WORK"
     exit "$status"
 }
+latest_xray_release() {
+    local page count
+    : > "$NF_WORK/tags"
+    for ((page=1; page<=100; page++)); do
+        download_https "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=100&page=$page" "$NF_WORK/latest.json" || return 1
+        count=$(jq -er 'if type == "array" then length else error("Invalid releases") end' "$NF_WORK/latest.json") || return 1
+        jq -r '.[] | select(.draft == false) | .tag_name | select(type == "string") | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' "$NF_WORK/latest.json" >> "$NF_WORK/tags" || return 1
+        if ((count < 100)); then
+            [[ -s $NF_WORK/tags ]] || return 1
+            # Numeric year.month.day ordering, independent of release/API order.
+            sort -V "$NF_WORK/tags" | tail -n 1
+            return 0
+        fi
+    done
+    return 1
+}
 cli_xray_update() (
     preflight
     cli_load_state
@@ -77,9 +93,7 @@ cli_xray_update() (
     local target current=$NF_XRAY_VERSION newest
     "$NF_BIN" version > "$NF_WORK/current-version"
     grep -q "^Xray ${current#v} " "$NF_WORK/current-version" || die 'Installed Xray version differs from state'
-    download_https https://api.github.com/repos/XTLS/Xray-core/releases/latest "$NF_WORK/latest.json"
-    target=$(jq -er 'select(.draft == false and .prerelease == false) | .tag_name | select(type == "string")' "$NF_WORK/latest.json") || die 'Invalid official Xray release metadata'
-    [[ $target =~ ^v[0-9]+[.][0-9]+[.][0-9]+$ ]] || die 'Unsupported official Xray release tag'
+    target=$(latest_xray_release) || die 'Invalid official Xray release metadata'
     newest=$(printf '%s\n%s\n' "$current" "$target" | sort -V | tail -n 1)
     if [[ $current == "$target" || $newest == "$current" ]]; then
         printf 'Xray %s is current; no update needed\n' "$current"

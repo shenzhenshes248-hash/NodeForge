@@ -11,11 +11,11 @@ unchanged=$(sha256sum "$NF_CONFIG" "$NF_UNIT" "$NF_CLI" "$NF_RUNTIME/.inventory"
 link=$(cli_main link)
 runtime_before=$(runtime_inventory "$NF_RUNTIME")
 download_https() {
-    [[ $1 == https://api.github.com/repos/XTLS/Xray-core/releases/latest ]] || return 1
+    [[ $1 == "https://api.github.com/repos/XTLS/Xray-core/releases?per_page=100&page=1" ]] || return 1
     [[ ! -f $NF_TEST_ROOT/fail-query ]] || return 1
     local tag=v99.0.0
     [[ ! -f $NF_TEST_ROOT/no-update ]] || tag=v26.9.9
-    printf '{"tag_name":"%s","draft":false,"prerelease":false}\n' "$tag" > "$2"
+    printf '[{"tag_name":"v26.3.27","draft":false,"prerelease":false},{"tag_name":"%s","draft":false,"prerelease":true},{"tag_name":"v999.1.1","draft":true,"prerelease":true}]\n' "$tag" > "$2"
 }
 fetch_xray() {
     [[ ! -f $NF_TEST_ROOT/fail-download ]] || return 1
@@ -41,6 +41,15 @@ wait_managed_service() {
     if [[ -f $NF_TEST_ROOT/fail-new-health && $(sha256_file "$NF_BIN") != "$old_binary" ]]; then return 1; fi
     managed_service_healthy
 }
+# CalVer numeric order (9 versus 10), including pre-releases and ignoring drafts.
+(
+    # Invoked indirectly by latest_xray_release.
+    # shellcheck disable=SC2329
+    download_https() {
+        printf '[{"tag_name":"v26.9.9","draft":false,"prerelease":true},{"tag_name":"v26.10.1","draft":false,"prerelease":true},{"tag_name":"v99.1.1","draft":true}]' > "$2"
+    }
+    assert_eq v26.10.1 "$(latest_xray_release)"
+)
 touch "$NF_TEST_ROOT/no-update"
 cli_main xray-update > "$NF_WORK/no-update.stdout"
 grep -q 'no update needed' "$NF_WORK/no-update.stdout"
