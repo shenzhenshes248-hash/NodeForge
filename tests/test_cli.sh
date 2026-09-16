@@ -30,7 +30,7 @@ assert_eq "$config_hash" "$(sha256_file "$NF_CONFIG")"
 assert_eq "$state_hash" "$(sha256_file "$NF_STATE")"
 # All root-only commands reject authorization before lock acquisition or mutation.
 touch "$NF_TEST_ROOT/nonroot"
-for command in status info link restart uninstall update; do
+for command in status info link restart uninstall update xray-update; do
     assert_fails cli_main "$command"
     grep -q 'must be run as root' "$NF_WORK/expected-failure.log"
 done

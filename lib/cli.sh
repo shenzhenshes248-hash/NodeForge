@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 cli_help() {
-    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  info\n  link\n  restart\n  uninstall\n  update\n  version\n' "$NF_NODEFORGE_VERSION"
+    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  info\n  link\n  restart\n  uninstall\n  update\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
 }
 cli_require_root() { (( EUID == 0 )) || die 'NodeForge: this command must be run as root'; }
 cli_load_state() {
@@ -56,18 +56,19 @@ cli_main() {
     case ${1:-} in
         ''|help|--help) cli_help; return ;;
         version) printf 'NodeForge %s\n' "$NF_NODEFORGE_VERSION"; return ;;
-        status|info|link|restart|uninstall|update) ;;
+        status|info|link|restart|uninstall|update|xray-update) ;;
         *) die 'Unknown command; use nodeforge --help' ;;
     esac
     cli_require_root
     local command=$1
     case $command in
         status|info|link) acquire_lock shared ;;
-        restart|uninstall|update) acquire_lock ;;
+        restart|uninstall|update|xray-update) acquire_lock ;;
     esac
     # Literal dispatch only; no state-controlled targets, paths, or function names.
     case $command in
         status) cli_status ;; info) cli_info ;; link) cli_link ;;
         restart) cli_restart ;; uninstall) cli_uninstall ;; update) cli_update ;;
+        xray-update) cli_xray_update ;;
     esac
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 case $1 in
+    version) printf 'Xray 26.9.9 (test fixture)\n' ;;
     uuid) printf '123e4567-e89b-42d3-a456-426614174000\n' ;;
     x25519) printf 'PrivateKey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nPassword (PublicKey): L-V9o0fNYkMVKNqsX7spBzD_9oSvxM_C7ZCZX1jLO3Q\nHash32: ignored\n' ;;
     run)

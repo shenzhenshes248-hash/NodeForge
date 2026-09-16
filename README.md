@@ -8,6 +8,8 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 ## 平台
 
+新增的本地实现 `nodeforge xray-update` 用于独立更新 Xray，流程及验证范围见 [docs/M2_XRAY_UPDATE.md](docs/M2_XRAY_UPDATE.md)。
+
 本地开发中的 `nodeforge update` 仅更新 NodeForge runtime/CLI，说明见 [docs/M2_PHASE5.md](docs/M2_PHASE5.md)；当前 GitHub 已发布版本尚不包含该命令。
 
 M2 Phase 4 bootstrap 的流程与待发布的一行命令见 [docs/M2_PHASE4.md](docs/M2_PHASE4.md)。当前仅完成本地实现，尚未发布 GitHub Release。

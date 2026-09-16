@@ -50,3 +50,59 @@ test_xray_config() {
         die 'Xray rejected the candidate configuration (raw output suppressed to protect secrets)'
     fi
 }
+
+xray_update_cleanup() {
+    local status=$?
+    trap - EXIT INT TERM
+    if [[ ${NF_TRANSACTION:-0} == 1 ]]; then
+        if ! rollback; then
+            log ERROR 'Xray rollback incomplete; protected transaction retained'
+            status=1
+        elif ! wait_managed_service; then
+            log ERROR 'Old Xray restored but service/listener recovery check failed'
+            status=1
+        fi
+    fi
+    rm -rf -- "$NF_WORK"
+    exit "$status"
+}
+cli_xray_update() (
+    preflight
+    cli_load_state
+    managed_service_healthy || die 'Current Xray service/listener is unhealthy'
+    init_workspace
+    trap xray_update_cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    local target current=$NF_XRAY_VERSION newest
+    "$NF_BIN" version > "$NF_WORK/current-version"
+    grep -q "^Xray ${current#v} " "$NF_WORK/current-version" || die 'Installed Xray version differs from state'
+    download_https https://api.github.com/repos/XTLS/Xray-core/releases/latest "$NF_WORK/latest.json"
+    target=$(jq -er 'select(.draft == false and .prerelease == false) | .tag_name | select(type == "string")' "$NF_WORK/latest.json") || die 'Invalid official Xray release metadata'
+    [[ $target =~ ^v[0-9]+[.][0-9]+[.][0-9]+$ ]] || die 'Unsupported official Xray release tag'
+    newest=$(printf '%s\n%s\n' "$current" "$target" | sort -V | tail -n 1)
+    if [[ $current == "$target" || $newest == "$current" ]]; then
+        printf 'Xray %s is current; no update needed\n' "$current"
+        return 0
+    fi
+    fetch_xray "$target"
+    test_xray_config "$NF_CANDIDATE_BIN" "$NF_CONFIG"
+    begin_transaction
+    atomic_install "$NF_CANDIDATE_BIN" "$NF_BIN" 755 root root
+    atomic_install "$NF_CANDIDATE_LICENSE" "$NF_LICENSE" 644 root root
+    if ! timeout 20 runuser -u nodeforge -- "$NF_BIN" run -test -config "$NF_CONFIG" > "$NF_WORK/final-test.log" 2>&1; then
+        die 'New Xray rejected the unchanged configuration as the service user'
+    fi
+    NF_XRAY_VERSION=$target
+    write_state
+    timeout 30 systemctl restart "$NF_SERVICE" >/dev/null 2>&1 || die 'Xray restart failed'
+    wait_managed_service || die 'New Xray service/listener validation failed'
+    # We own the ready transaction under the exclusive CLI lock. Validate the
+    # canonical status path before committing, without rejecting our own pending.
+    (
+        NF_PENDING=$NF_WORK/no-pending
+        cli_status > "$NF_WORK/final-status"
+    )
+    finish_transaction
+    printf 'Xray updated from %s to %s; service and listener healthy\n' "$current" "$target"
+)
