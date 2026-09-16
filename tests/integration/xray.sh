@@ -8,7 +8,7 @@ load_modules
 init_workspace
 trap cleanup EXIT
 detect_platform /etc/os-release "$(uname -m)"
-fetch_xray "$NF_DEFAULT_VERSION"
+fetch_xray "$NF_DEFAULT_XRAY_VERSION"
 generate_identity
 NF_PORT=23456 NF_TARGET=www.microsoft.com:443 NF_SNI=www.microsoft.com NF_LISTEN=0.0.0.0
 validate_uuid "$NF_UUID"
