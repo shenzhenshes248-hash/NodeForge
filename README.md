@@ -95,7 +95,7 @@ sudo env \
 | `/etc/systemd/system/nodeforge-xray.service` | systemd unit，root，0644 |
 | `/run/lock/nodeforge.lock` | 操作互斥锁；保留空锁文件避免并发锁 inode 竞争 |
 
-服务以不可登录的 `nodeforge` 系统用户运行，使用正式绝对配置路径、`Restart=on-failure`、`RestartSec=5s`，开机自启。服务文件系统只读、无额外 capabilities、不访问 home，并使用 `NoNewPrivileges`。
+服务以不可登录的 `nodeforge` 系统用户运行，使用正式绝对配置路径、`Restart=on-failure`、`RestartSec=5s`，开机自启。服务文件系统只读，仅授予绑定 TCP 443 所需的 `CAP_NET_BIND_SERVICE`，不访问 home，并使用 `NoNewPrivileges`。
 
 核心 stdout/stderr 默认丢弃，防止运行错误把配置凭据写入 journal；可以通过 `systemctl status nodeforge-xray.service` 查看 systemd 生命周期和退出状态。安装器的 `INFO/WARN/ERROR` 输出与原始核心输出分离。配置错误只报告失败类型，不自动打印包含敏感值的原始错误。
 

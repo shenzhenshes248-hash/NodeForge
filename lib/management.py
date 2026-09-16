@@ -51,7 +51,8 @@ def validate_state(state_path, config_path, template_path, derive=False):
     inbound = config['inbounds'][0]
     reality = inbound['streamSettings']['realitySettings']
     client = inbound['settings']['clients'][0]
-    if (type(inbound['port']) is not int or not 1024 <= inbound['port'] <= 65535
+    if (type(inbound['port']) is not int
+            or not (inbound['port'] == 443 or 1024 <= inbound['port'] <= 65535)
             or inbound['listen'] != ('::' if ip.version == 6 else '0.0.0.0')
             or not matches(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}', client['id'])
             or not matches(r'[A-Za-z0-9_-]{43}', reality['privateKey'])

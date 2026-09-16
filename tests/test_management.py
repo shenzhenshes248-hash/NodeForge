@@ -41,6 +41,10 @@ class ManagementTests(unittest.TestCase):
     def test_valid_identity(self):
         self.validate()
 
+    def test_port_443_identity(self):
+        self.config['inbounds'][0]['port'] = 443
+        self.validate()
+
     def test_ipv6_identity(self):
         self.state['server_ip'] = '2606:4700:4700::1111'
         self.config['inbounds'][0]['listen'] = '::'
@@ -77,7 +81,7 @@ class ManagementTests(unittest.TestCase):
 
     def test_config_shape_and_values(self):
         original = copy.deepcopy(self.config)
-        for key, value in [('port', True), ('port', '23456'), ('port', 70000),
+        for key, value in [('port', True), ('port', '23456'), ('port', 80), ('port', 70000),
                            ('listen', '127.0.0.1'), ('protocol', 'other')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 self.config = copy.deepcopy(original)
