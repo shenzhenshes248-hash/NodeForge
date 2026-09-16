@@ -38,7 +38,7 @@ sudo bash install.sh
 
 运行依赖为 Bash、GNU coreutils、systemd 及发行版提供的 `ca-certificates curl unzip jq openssl iproute2 python3 util-linux`。Python 仅用于标准库 IP/DNS/端口验证，不安装 pip 包。系统依赖来自 apt 的签名仓库，不使用远程 shell 安装器。
 
-默认端口从 **20000–50000** 使用安全随机源选择，并检查 IPv4/IPv6 TCP 绑定。完成后输出 Server IP、Port、UUID、Reality Public Key、Short ID、SNI、Flow 和完整分享链接，**不输出私钥**。
+默认优先使用 TCP **443**；仅当 443 已被占用时，才从 **20000–50000** 使用安全随机源选择其他可用端口。端口选择会检查 IPv4/IPv6 TCP 绑定。完成后输出 Server IP、Port、UUID、Reality Public Key、Short ID、SNI、Flow 和完整分享链接，**不输出私钥**。
 
 VPS 的云安全组和主机防火墙需要允许输出的 TCP 端口。NodeForge 不自动修改任何防火墙，也无法打开云平台安全组。安装成功表示本机服务检查通过；请用外部客户端完成连接验收。
 
@@ -64,7 +64,7 @@ sudo env \
 | `NODEFORGE_REALITY_TARGET` | `host:port` 或 `[IPv6]:port` |
 | `NODEFORGE_SERVER_NAME` | 明确的 DNS SNI，不支持通配符 |
 | `NODEFORGE_SERVER_IP` | 可路由公网 IPv4/IPv6 字面值；NAT 环境建议明确提供 |
-| `NODEFORGE_PORT` | 非特权端口 1024–65535；默认随机范围仍是 20000–50000 |
+| `NODEFORGE_PORT` | TCP 443 或非特权端口 1024–65535；默认优先 443，已占用时随机选择 20000–50000 |
 | `NODEFORGE_UUID` | 标准 UUID 格式 |
 | `NODEFORGE_SHORT_ID` | 16 位小写十六进制字符 |
 | `NODEFORGE_XRAY_VERSION` | 明确的官方 `v数字.数字.数字` Release；新版本需先跑集成测试 |

@@ -47,6 +47,9 @@ def main():
         if not port_free(int(sys.argv[2])):
             raise ValueError('TCP port unavailable')
     elif operation == 'choose-port':
+        if port_free(443):
+            print(443)
+            return
         for _ in range(256):
             port = 20000 + secrets.randbelow(30001)
             if port_free(port):

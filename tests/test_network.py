@@ -27,14 +27,24 @@ class NetworkTests(unittest.TestCase):
             listener.listen(1)
             self.assertFalse(network.port_free(listener.getsockname()[1]))
 
-    def test_random_port_boundaries(self):
+    def test_free_443_is_preferred(self):
+        with patch('sys.argv', ['network.py', 'choose-port']), \
+                patch.object(network.secrets, 'randbelow') as random_port, \
+                patch.object(network, 'port_free', return_value=True) as free, \
+                patch('builtins.print') as output:
+            network.main()
+            free.assert_called_once_with(443)
+            random_port.assert_not_called()
+            output.assert_called_once_with(443)
+
+    def test_occupied_443_uses_random_fallback(self):
         for offset, expected in ((0, 20000), (30000, 50000)):
             with patch('sys.argv', ['network.py', 'choose-port']), \
                     patch.object(network.secrets, 'randbelow', return_value=offset), \
-                    patch.object(network, 'port_free', return_value=True) as free, \
+                    patch.object(network, 'port_free', side_effect=(False, True)) as free, \
                     patch('builtins.print') as output:
                 network.main()
-                free.assert_called_once_with(expected)
+                self.assertEqual([item.args for item in free.call_args_list], [(443,), (expected,)])
                 output.assert_called_once_with(expected)
 
     def test_exhaustion_is_bounded(self):
@@ -42,7 +52,8 @@ class NetworkTests(unittest.TestCase):
                 patch.object(network, 'port_free', return_value=False) as free:
             with self.assertRaises(ValueError):
                 network.main()
-            self.assertEqual(free.call_count, 256)
+            self.assertEqual(free.call_count, 257)
+            self.assertEqual(free.call_args_list[0].args, (443,))
 
     def test_dns_private_address_rejected(self):
         with patch('sys.argv', ['network.py', 'target-addresses', 'example.com', '443']), \

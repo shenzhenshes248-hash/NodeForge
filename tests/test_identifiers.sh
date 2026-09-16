@@ -7,7 +7,7 @@ validate_short_id 0123456789abcdef
 assert_fails validate_short_id ''
 assert_fails validate_short_id 123
 assert_fails validate_short_id 0123456789abcdeg
-for port in 1024 20000 50000 65535; do validate_port "$port"; done
+for port in 443 1024 20000 50000 65535; do validate_port "$port"; done
 for port in 0 80 65536 -1 020000 '20000;exit' 999999999999999999; do assert_fails validate_port "$port"; done
 NF_CANDIDATE_BIN=$NF_WORK/fixture-xray
 cp "$NF_SOURCE/tests/fixtures/xray/xray" "$NF_CANDIDATE_BIN"

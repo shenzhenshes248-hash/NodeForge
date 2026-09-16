@@ -80,7 +80,7 @@ acquire_lock() {
     fi
 }
 network_helper() { python3 "$NF_SOURCE/lib/network.py" "$@"; }
-validate_port() { [[ $1 =~ ^[1-9][0-9]{3,4}$ ]] && (( 10#$1 >= 1024 && 10#$1 <= 65535 )); }
+validate_port() { [[ $1 == 443 ]] || { [[ $1 =~ ^[1-9][0-9]{3,4}$ ]] && (( 10#$1 >= 1024 && 10#$1 <= 65535 )); }; }
 choose_port() { network_helper choose-port; }
 port_available() { network_helper port "$1"; }
 resolve_server_ip() {

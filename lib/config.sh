@@ -45,7 +45,7 @@ apply_overrides() {
     NF_SNI=${NODEFORGE_SERVER_NAME:-$NF_SNI}
     validate_uuid "$NF_UUID" || die 'Invalid UUID'
     validate_short_id "$NF_SHORT_ID" || die 'shortId must be exactly 16 lowercase hex characters'
-    validate_port "$NF_PORT" || die 'Port must be in 1024-65535 (random default: 20000-50000)'
+    validate_port "$NF_PORT" || die 'Port must be 443 or in 1024-65535 (default: 443; random fallback: 20000-50000)'
 }
 generate_config() {
     local output=$1
