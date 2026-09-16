@@ -1,5 +1,7 @@
 # M2 Phase 3 — Local Release Bundle + Signed Manifest
 
+**状态：COMPLETE；M2 正式版本 v0.2.0。以下为本阶段范围记录；当前总览见 [HANDOFF.md](HANDOFF.md)。**
+
 本阶段只提供 `tools/release.py` 的本地 build / sign / verify。依赖 Python 3.9+、Bash 和支持 Ed25519 的 OpenSSL（验证环境使用 OpenSSL 3）。不连接网络，不安装、提取或执行 bundle，不增加 bootstrap/update、state schema 2 或版本切换。
 
 ## 格式与用法

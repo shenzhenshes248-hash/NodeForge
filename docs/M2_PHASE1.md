@@ -1,5 +1,7 @@
 # M2 Phase 1：版本与兼容边界
 
+**状态：COMPLETE；M2 正式版本 v0.2.0。以下为本阶段范围记录；当前总览见 [HANDOFF.md](HANDOFF.md)。**
+
 ## 本阶段实现
 
 `VERSION` 是 NodeForge 源码版本的单一来源，当前 `v0.2.0-dev`。模块读取为 `NF_NODEFORGE_VERSION`；Xray 默认标签单独为 `NF_DEFAULT_XRAY_VERSION`，选择/已安装版本使用 `NF_XRAY_VERSION`。`NODEFORGE_XRAY_VERSION` 对外覆盖变量保持不变。

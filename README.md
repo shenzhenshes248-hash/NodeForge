@@ -2,17 +2,11 @@
 
 NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实现 VLESS、REALITY 或 XTLS Vision 协议；协议和流量处理由未经修改的官方 [XTLS/Xray-core](https://github.com/XTLS/Xray-core) 实现。
 
-当前范围为 Milestone 1：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
+当前协议范围为：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**状态：M1 已完成 Debian 12 amd64 实机验收；M2 Phase 2 COMPLETE；Phase 3 提供本地 release bundle 与 Ed25519 signed manifest，等待审核。尚未提供远程 bootstrap 或 update。** 发行格式和命令见 [docs/M2_PHASE3.md](docs/M2_PHASE3.md)。脱敏实机记录见 [docs/VALIDATION_M1_REAL.md](docs/VALIDATION_M1_REAL.md)，M2 边界见 [docs/M2_PHASE1.md](docs/M2_PHASE1.md)，CLI 设计与本地验证记录见 [docs/M2_PHASE2.md](docs/M2_PHASE2.md)。Ubuntu/arm64 为已实现支持范围，尚未实机验证。
+**状态：M1 COMPLETE；M2 COMPLETE。正式版本 `v0.2.0`，VERSION 为唯一版本来源。** 已完成本地 CLI、签名发行包、一行安装、NodeForge 自更新及 Xray 独立更新。当前交接和验收边界见 [docs/HANDOFF.md](docs/HANDOFF.md)。Debian 12 amd64 已实机验收，Ubuntu/arm64 尚未实机验证。
 
 ## 平台
-
-新增的本地实现 `nodeforge xray-update` 用于独立更新 Xray，流程及验证范围见 [docs/M2_XRAY_UPDATE.md](docs/M2_XRAY_UPDATE.md)。
-
-本地开发中的 `nodeforge update` 仅更新 NodeForge runtime/CLI，说明见 [docs/M2_PHASE5.md](docs/M2_PHASE5.md)；当前 GitHub 已发布版本尚不包含该命令。
-
-M2 Phase 4 bootstrap 的流程与待发布的一行命令见 [docs/M2_PHASE4.md](docs/M2_PHASE4.md)。当前仅完成本地实现，尚未发布 GitHub Release。
 
 | 项目 | 支持范围 |
 | --- | --- |
@@ -25,7 +19,13 @@ M2 Phase 4 bootstrap 的流程与待发布的一行命令见 [docs/M2_PHASE4.md]
 
 ## 安装
 
-获取并审阅本仓库的可信副本，在仓库根目录运行：
+Debian 12 amd64 官方一行安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shenzhenshes248-hash/NodeForge/master/bootstrap.sh | sudo bash
+```
+
+也可获取并审阅本仓库的可信副本，在仓库根目录运行：
 
 ```bash
 sudo bash install.sh --dry-run
@@ -126,7 +126,7 @@ sudo bash uninstall.sh
 
 ## 本地管理命令
 
-本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.2.0-dev`。
+本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.2.0`。
 
 | 命令 | 权限 | 实际行为 |
 | --- | --- | --- |
@@ -136,13 +136,15 @@ sudo bash uninstall.sh
 | `sudo nodeforge info` | root | 显示版本、固定协议、监听地址/端口、受管路径和服务健康情况；不显示节点凭据 |
 | `sudo nodeforge link` | root | 仅向标准输出写一条当前有效的 VLESS 分享链接；不检查外部客户端连通性 |
 | `sudo nodeforge restart` | root | 先校验安装和正式配置，再重启固定的受管 service，并限时验证服务与监听恢复 |
+| `sudo nodeforge update` | root | 签名验证后仅更新 NodeForge runtime/CLI，见 [Phase 5](docs/M2_PHASE5.md) |
+| `sudo nodeforge xray-update` | root | 独立更新官方 Xray（含 pre-release），失败回滚，见 [Xray update](docs/M2_XRAY_UPDATE.md) |
 | `sudo nodeforge uninstall` | root | 复用正式卸载逻辑，清理受管 CLI、Xray、配置和 state，保留未知文件 |
 
-`status/info/link` 共用 `/run/lock/nodeforge.lock` 的共享锁；install/restart/uninstall 使用该锁的排他锁。锁冲突明确返回非 0，不自动重试、提权或修复。只读命令不写配置/state、不创建凭据副本、不恢复 pending 事务；发现 pending 时请使用本地 installer 的既有恢复路径。
+`status/info/link` 共用 `/run/lock/nodeforge.lock` 的共享锁；install/restart/uninstall/update/xray-update 使用该锁的排他锁。锁冲突明确返回非 0，不自动重试、提权或修复。只读命令不写配置/state、不创建凭据副本、不恢复 pending 事务；发现 pending 时请使用本地 installer 的既有恢复路径。
 
 所有读取节点状态的 CLI 命令仅支持 schema 1，并核对配置摘要和公私钥关系；损坏、缺字段、未知 schema、身份不一致或非预期服务均拒绝。`status/info` 不输出 UUID、私钥、公钥、shortId 或分享链接；`link` 是显式的凭据输出操作。原有敏感文件权限不放宽，root 以外调用受保护命令会明确失败，不自动 sudo。
 
-本地运行时安装于 `/usr/local/nodeforge/app/releases/<VERSION>/`，入口固定使用这一组模块；重复安装同一份源码保持入口和 runtime 不变。同版本不同内容拒绝原地覆盖，本阶段没有运行时更新或版本切换。卸载先验证固定文件清单及摘要，再逐个删除受管文件；未知内容保留。该清单是本地归属记录，不是签名发行 manifest。
+本地运行时安装于 `/usr/local/nodeforge/app/releases/<VERSION>/`，入口固定使用这一组模块；重复安装同一份源码保持入口和 runtime 不变。同版本不同内容拒绝原地覆盖，运行时更新使用 `nodeforge update`，不提供多版本切换。卸载先验证固定文件清单及摘要，再逐个删除受管文件；未知内容保留。该清单是本地归属记录，不是签名发行 manifest。
 
 运行时先复制到 final 同一父目录下的 `.pending-<VERSION>`，校验后使用无 copy fallback 的目录 rename。事务回滚可凭精确的创建记录清理本次不完整产物；正常卸载仍要求完整 inventory。关键恢复失败会返回非零并保留 pending，恢复完成后的证据退役失败也会保留完成标记供重试。没有新增 fsync/断电持久性保证，不能保证任何故障都能自动恢复。
 

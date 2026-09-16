@@ -1,5 +1,7 @@
 # M2 Phase 2 — Local Management CLI
 
+**状态：COMPLETE；M2 正式版本 v0.2.0。以下为本阶段范围记录；当前总览见 [HANDOFF.md](HANDOFF.md)。**
+
 ## 范围与基线
 
 本阶段实现本地 installer 安装的 `nodeforge` 管理入口，等待用户审核；不代表整个 M2 COMPLETE。本次没有连接或修改 VPS。
