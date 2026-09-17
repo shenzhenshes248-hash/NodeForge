@@ -21,9 +21,10 @@ grep -q '^Status: healthy$' "$NF_WORK/status"
 cli_main info > "$NF_WORK/info"
 grep -q '^Xray version: v26.9.9$' "$NF_WORK/info"
 cli_main link > "$NF_WORK/link"
-assert_eq 1 "$(wc -l < "$NF_WORK/link" | tr -d ' ')"
-assert_eq "$(grep '^vless://' "$NF_WORK/install-output")" "$(cat "$NF_WORK/link")"
-for secret in "$NF_PRIVATE_KEY" "$NF_PUBLIC_KEY" "$NF_UUID" "$NF_SHORT_ID" 'vless://'; do
+assert_eq 2 "$(wc -l < "$NF_WORK/link" | tr -d ' ')"
+assert_eq "$(grep '^vless://' "$NF_WORK/install-output")" "$(sed -n '1p' "$NF_WORK/link")"
+grep -Eq '^hysteria2://[^@]+@[^?]+[?]mport=20000-50000&insecure=1&pinSHA256=[0-9a-f]{64}#NodeForge-HY2$' "$NF_WORK/link"
+for secret in "$NF_PRIVATE_KEY" "$NF_PUBLIC_KEY" "$NF_UUID" "$NF_SHORT_ID" "$NF_HYSTERIA_PASSWORD" 'vless://' 'hysteria2://'; do
     assert_fails grep -F "$secret" "$NF_WORK/status" "$NF_WORK/info"
 done
 assert_eq "$config_hash" "$(sha256_file "$NF_CONFIG")"
@@ -78,7 +79,7 @@ assert_fails cli_main restart
 assert_eq "$restarts" "$(grep -c '^restart ' "$NF_TEST_ROOT/systemctl.calls")"
 rm "$NF_TEST_ROOT/fail-config"
 cli_main restart > "$NF_WORK/restart"
-grep -q 'service and listener healthy' "$NF_WORK/restart"
+grep -q 'services and listeners healthy' "$NF_WORK/restart"
 touch "$NF_TEST_ROOT/fail-restart"
 assert_fails cli_main restart
 rm "$NF_TEST_ROOT/fail-restart"

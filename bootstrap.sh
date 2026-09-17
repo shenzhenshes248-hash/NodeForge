@@ -244,7 +244,7 @@ NODEFORGE_VERIFIER
         --manifest "$NF_BOOT_TMP/manifest.json" --signature "$NF_BOOT_TMP/manifest.sig" \
         --destination "$NF_BOOT_TMP/extracted"
     source="$NF_BOOT_TMP/extracted/nodeforge-$version"
-    for file in VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py tools/release.py trust/release-ed25519.pub install.sh uninstall.sh LICENSE README.md docs/M2_PHASE3.md; do
+    for file in VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service templates/nodeforge-hysteria.service lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh lib/hysteria.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py tools/release.py trust/release-ed25519.pub install.sh uninstall.sh LICENSE README.md docs/M2_PHASE3.md; do
         [[ -f $source/$file && ! -L $source/$file ]] || {
             printf 'Incomplete release bundle\n' >&2; return 1;
         }

@@ -8,4 +8,10 @@ for line in 'User=nodeforge' 'Group=nodeforge' 'Restart=on-failure' 'RestartSec=
     grep -Fxq "$line" "$unit"
 done
 assert_fails grep -Eq '/root|User=root' "$unit"
+hy_unit=$NF_SOURCE/templates/nodeforge-hysteria.service
+for line in 'User=root' 'Group=root' 'Restart=on-failure' 'WantedBy=multi-user.target' \
+  'ExecStart=/usr/local/nodeforge/bin/hysteria server -c /etc/nodeforge/hysteria.yaml' \
+  'CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE'; do
+    grep -Fxq "$line" "$hy_unit"
+done
 printf 'PASS systemd template (no host systemd calls)\n'

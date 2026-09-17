@@ -7,7 +7,7 @@ printf 'new\n' > "$NF_WORK/source"
 atomic_install "$NF_WORK/source" "$NF_WORK/destination" 600 root root
 assert_eq new "$(cat "$NF_WORK/destination")"
 # Invoked indirectly by the production atomic_install function.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 mv() { return 1; }
 assert_fails atomic_install "$NF_WORK/source" "$NF_WORK/destination" 600 root root
 assert_eq new "$(cat "$NF_WORK/destination")"

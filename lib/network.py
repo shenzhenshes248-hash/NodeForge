@@ -14,7 +14,7 @@ def public_ip(value):
     return ip
 
 
-def port_free(port):
+def port_free(port, sock_type=socket.SOCK_STREAM):
     sockets = []
     try:
         families = [(socket.AF_INET, '0.0.0.0')]
@@ -22,7 +22,7 @@ def port_free(port):
             families.append((socket.AF_INET6, '::'))
         for family, address in families:
             try:
-                sock = socket.socket(family, socket.SOCK_STREAM)
+                sock = socket.socket(family, sock_type)
                 sockets.append(sock)
                 if family == socket.AF_INET6:
                     sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
@@ -46,6 +46,9 @@ def main():
     elif operation == 'port':
         if not port_free(int(sys.argv[2])):
             raise ValueError('TCP port unavailable')
+    elif operation == 'udp-port':
+        if not port_free(int(sys.argv[2]), socket.SOCK_DGRAM):
+            raise ValueError('UDP port unavailable')
     elif operation == 'choose-port':
         if port_free(443):
             print(443)

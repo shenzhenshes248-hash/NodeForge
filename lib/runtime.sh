@@ -3,9 +3,9 @@ set -Eeuo pipefail
 
 # Fixed local install inventory. This is ownership metadata, not a signed release.
 runtime_files() {
-    printf '%s\n' VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service \
+    printf '%s\n' VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service templates/nodeforge-hysteria.service \
         lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh \
-        lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh \
+        lib/hysteria.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh \
         lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py \
         tools/release.py trust/release-ed25519.pub
 }

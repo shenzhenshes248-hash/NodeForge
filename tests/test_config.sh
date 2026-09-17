@@ -3,6 +3,7 @@ set -Eeuo pipefail
 source "${NF_SOURCE:?}/tests/helpers/setup.sh"
 NF_UUID=123e4567-e89b-42d3-a456-426614174000 NF_PORT=23456 NF_TARGET=example.com:443 NF_SNI=example.com
 NF_SHORT_ID=0123456789abcdef NF_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA NF_PUBLIC_KEY=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB NF_LISTEN=0.0.0.0
+NF_HYSTERIA_PASSWORD=ABCDEFGHIJKLMNOPQRSTUVWXYZ123456 NF_HYSTERIA_PIN=0000000000000000000000000000000000000000000000000000000000000000
 generate_config "$NF_WORK/generated.json"
 jq -e '.inbounds[0] | .port == 23456 and .protocol == "vless" and .settings.decryption == "none" and
   .settings.clients[0].flow == "xtls-rprx-vision" and .streamSettings.network == "raw" and

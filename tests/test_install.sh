@@ -8,7 +8,7 @@ first_state=$(sha256_file "$NF_STATE")
 install_nodeforge > "$NF_WORK/second-output"
 assert_eq "$first" "$(sha256_file "$NF_CONFIG")"
 assert_eq "$first_state" "$(sha256_file "$NF_STATE")"
-assert_eq 1 "$(grep -c '^restart ' "$NF_TEST_ROOT/systemctl.calls")"
+assert_eq 1 "$(grep -c '^restart nodeforge-xray.service$' "$NF_TEST_ROOT/systemctl.calls")"
 assert_eq 2 "$(find "$NF_DATA_DIR/backups" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
 assert_fails grep -q AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "$NF_WORK/second-output"
 touch "$NF_TEST_ROOT/fail-config"

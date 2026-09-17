@@ -7,6 +7,7 @@ printf 'user data\n' > "$NF_CONFIG_DIR/keep-me"
 printf 'unrelated\n' > "$NF_TEST_ROOT/unrelated"
 uninstall_nodeforge
 [[ ! -f $NF_CONFIG && ! -f $NF_BIN && ! -f $NF_UNIT && ! -f $NF_STATE ]]
+[[ ! -f $NF_HYSTERIA_CONFIG && ! -f $NF_HYSTERIA_BIN && ! -f $NF_HYSTERIA_UNIT && ! -f $NF_HYSTERIA_STATE ]]
 [[ -f $NF_CONFIG_DIR/keep-me && -f $NF_TEST_ROOT/unrelated ]]
-[[ ! -f $NF_TEST_ROOT/active && ! -f $NF_TEST_ROOT/enabled ]]
+[[ ! -f $NF_TEST_ROOT/active && ! -f $NF_TEST_ROOT/enabled && ! -f $NF_TEST_ROOT/hysteria-active && ! -f $NF_TEST_ROOT/hysteria-enabled ]]
 printf 'PASS uninstall preserves unknown files\n'

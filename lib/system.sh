@@ -49,12 +49,13 @@ check_paths() {
         [[ ! -L $path ]] || die "Refusing symlink: $path"
         [[ ! -e $path || -d $path ]] || die "Expected directory: $path"
     done
-    for path in "$NF_BIN" "$NF_LICENSE" "$NF_CONFIG" "$NF_STATE" "$NF_UNIT"; do
+    for path in "$NF_BIN" "$NF_LICENSE" "$NF_CONFIG" "$NF_STATE" "$NF_UNIT" \
+      "$NF_HYSTERIA_BIN" "$NF_HYSTERIA_CONFIG" "$NF_HYSTERIA_CERT" "$NF_HYSTERIA_KEY" "$NF_HYSTERIA_STATE" "$NF_HYSTERIA_UNIT"; do
         [[ ! -L $path ]] || die "Refusing symlink: $path"
         [[ ! -e $path || -f $path ]] || die "Expected regular file: $path"
     done
     if [[ ${1:-} != uninstall && ! -f $NF_STATE && ! -d $NF_PENDING ]]; then
-        for path in "$NF_BIN_DIR" "$NF_CONFIG_DIR" "$NF_DATA_DIR" "$NF_UNIT"; do
+        for path in "$NF_BIN_DIR" "$NF_CONFIG_DIR" "$NF_DATA_DIR" "$NF_UNIT" "$NF_HYSTERIA_UNIT"; do
             [[ ! -e $path ]] || die "Unmanaged path exists: $path"
         done
     fi
@@ -62,7 +63,7 @@ check_paths() {
 install_dependencies() {
     info 'Installing required distribution packages'
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl unzip jq openssl iproute2 python3 util-linux
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl unzip jq openssl iproute2 python3 util-linux nftables
 }
 acquire_lock() {
     local mode=${1:-exclusive}
@@ -83,6 +84,7 @@ network_helper() { python3 "$NF_SOURCE/lib/network.py" "$@"; }
 validate_port() { [[ $1 == 443 ]] || { [[ $1 =~ ^[1-9][0-9]{3,4}$ ]] && (( 10#$1 >= 1024 && 10#$1 <= 65535 )); }; }
 choose_port() { network_helper choose-port; }
 port_available() { network_helper port "$1"; }
+udp_port_available() { network_helper udp-port "$1"; }
 resolve_server_ip() {
     local candidate
     if [[ -n ${NODEFORGE_SERVER_IP:-} ]]; then

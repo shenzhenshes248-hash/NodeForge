@@ -44,7 +44,7 @@ wait_managed_service() {
 # CalVer numeric order (9 versus 10), including pre-releases and ignoring drafts.
 (
     # Invoked indirectly by latest_xray_release.
-    # shellcheck disable=SC2329
+    # shellcheck disable=SC2317,SC2329
     download_https() {
         printf '[{"tag_name":"v26.9.9","draft":false,"prerelease":true},{"tag_name":"v26.10.1","draft":false,"prerelease":true},{"tag_name":"v99.1.1","draft":true}]' > "$2"
     }

@@ -27,6 +27,11 @@ class NetworkTests(unittest.TestCase):
             listener.listen(1)
             self.assertFalse(network.port_free(listener.getsockname()[1]))
 
+    def test_occupied_udp_port(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
+            listener.bind(('0.0.0.0', 0))
+            self.assertFalse(network.port_free(listener.getsockname()[1], socket.SOCK_DGRAM))
+
     def test_free_443_is_preferred(self):
         with patch('sys.argv', ['network.py', 'choose-port']), \
                 patch.object(network.secrets, 'randbelow') as random_port, \

@@ -20,6 +20,12 @@ activate_service() {
     systemctl restart "$NF_SERVICE"
     check_service_health
 }
+activate_hysteria_service() {
+    systemctl daemon-reload
+    systemctl enable "$NF_HYSTERIA_SERVICE"
+    systemctl restart "$NF_HYSTERIA_SERVICE"
+    check_hysteria_health
+}
 check_service_health() {
     local attempt
     for attempt in 1 2 3; do
@@ -27,6 +33,14 @@ check_service_health() {
         systemctl is-active --quiet "$NF_SERVICE" || die 'Xray service did not remain active'
     done
     ss -H -ltn "sport = :$NF_PORT" | grep -q . || die 'Xray TCP listener was not found'
+}
+check_hysteria_health() {
+    local attempt
+    for attempt in 1 2 3; do
+        sleep 1
+        systemctl is-active --quiet "$NF_HYSTERIA_SERVICE" || die 'Hysteria service did not remain active'
+    done
+    ss -H -lun "sport = :$NF_HYSTERIA_PORT" | grep -q . || die 'Hysteria UDP listener was not found'
 }
 
 # Management checks require both systemd ownership and an owned TCP socket.
@@ -38,6 +52,29 @@ managed_service_loaded() {
     dropins=$(timeout 3 systemctl show "$NF_SERVICE" -p DropInPaths --value 2>/dev/null) || return 1
     reload=$(timeout 3 systemctl show "$NF_SERVICE" -p NeedDaemonReload --value 2>/dev/null) || return 1
     [[ $load == loaded && $fragment == "$NF_UNIT" && -z $dropins && $reload == no ]]
+}
+managed_hysteria_loaded() {
+    local load fragment dropins reload
+    load=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p LoadState --value 2>/dev/null) || return 1
+    fragment=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p FragmentPath --value 2>/dev/null) || return 1
+    dropins=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p DropInPaths --value 2>/dev/null) || return 1
+    reload=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p NeedDaemonReload --value 2>/dev/null) || return 1
+    [[ $load == loaded && $fragment == "$NF_HYSTERIA_UNIT" && -z $dropins && $reload == no ]]
+}
+managed_hysteria_healthy() {
+    local active sub pid executable sockets after
+    managed_hysteria_loaded || return 1
+    active=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p ActiveState --value 2>/dev/null) || return 1
+    sub=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p SubState --value 2>/dev/null) || return 1
+    pid=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p MainPID --value 2>/dev/null) || return 1
+    [[ $active == active && $sub == running && $pid =~ ^[1-9][0-9]*$ ]] || return 1
+    executable=$(readlink -e -- "/proc/$pid/exe") || return 1
+    [[ $executable == "$NF_HYSTERIA_BIN" ]] || return 1
+    sockets=$(timeout 3 ss -H -lunp "sport = :$NF_HYSTERIA_PORT" 2>/dev/null) || return 1
+    [[ -n $sockets ]] || return 1
+    printf '%s\n' "$sockets" | grep -Eq "(^|[[:space:]])(\\*|0[.]0[.]0[.]0|\\[::\\]):${NF_HYSTERIA_PORT}[[:space:]].*pid=$pid," || return 1
+    after=$(timeout 3 systemctl show "$NF_HYSTERIA_SERVICE" -p MainPID --value 2>/dev/null) || return 1
+    [[ $after == "$pid" ]] && timeout 3 systemctl is-active --quiet "$NF_HYSTERIA_SERVICE" 2>/dev/null
 }
 managed_service_healthy() {
     local active sub pid executable sockets family=4 after

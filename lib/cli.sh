@@ -13,23 +13,29 @@ cli_load_state() {
     state_schema_supported "$NF_STATE" || die 'Unsupported or invalid NodeForge state schema'
     python3 "$NF_SOURCE/lib/management.py" state "$NF_STATE" "$NF_CONFIG" "$NF_SOURCE/templates/vless-reality.json" || die 'NodeForge: invalid state/config; status unhealthy'
     load_existing
+    load_hysteria
     cmp -s "$NF_UNIT" "$NF_SOURCE/templates/nodeforge-xray.service" || die 'Unsupported managed service unit'
+    cmp -s "$NF_HYSTERIA_UNIT" "$NF_SOURCE/templates/nodeforge-hysteria.service" || die 'Unsupported managed Hysteria service unit'
 }
 cli_status() {
     cli_load_state
     if ! managed_service_healthy; then die 'Status: unhealthy (service or owned listener validation failed)'; fi
-    printf 'NodeForge: installed\nState schema: 1\nXray service: active\nListener: active\nStatus: healthy\n'
+    if ! managed_hysteria_healthy; then die 'Status: unhealthy (Hysteria service or owned listener validation failed)'; fi
+    printf 'NodeForge: installed\nState schema: 1\nXray service: active\nHysteria service: active\nTCP listener: active\nUDP listener: active\nStatus: healthy\n'
 }
 cli_info() {
     cli_load_state
-    printf 'NodeForge version: %s\nState schema: 1\nXray version: %s\nService: %s\nProtocol: VLESS + TCP/RAW + REALITY + XTLS Vision\nListen: %s\nPort: %s\nConfig: %s\nState: %s\nBinary: %s\n' \
-        "$NF_NODEFORGE_VERSION" "$NF_XRAY_VERSION" "$NF_SERVICE" "$NF_LISTEN" "$NF_PORT" "$NF_CONFIG" "$NF_STATE" "$NF_BIN"
-    if managed_service_healthy; then printf 'Service/listener: healthy\n'
-    else die 'Service/listener: unhealthy'; fi
+    printf 'NodeForge version: %s\nState schema: 1\nXray version: %s\nXray service: %s\nReality protocol: VLESS + TCP/RAW + REALITY + XTLS Vision\nReality listen: %s\nReality port: %s\nHysteria version: %s\nHysteria service: %s\nHysteria UDP port: %s\nHysteria port hopping: %s\nHysteria client hop interval: %ss (v2rayN default)\nReality config: %s\nHysteria config: %s\nState: %s\nXray binary: %s\nHysteria binary: %s\n' \
+        "$NF_NODEFORGE_VERSION" "$NF_XRAY_VERSION" "$NF_SERVICE" "$NF_LISTEN" "$NF_PORT" \
+        "$NF_HYSTERIA_VERSION" "$NF_HYSTERIA_SERVICE" "$NF_HYSTERIA_PORT" "$NF_HYSTERIA_PORTS" \
+        "$NF_HYSTERIA_CLIENT_HOP_INTERVAL" "$NF_CONFIG" "$NF_HYSTERIA_CONFIG" "$NF_STATE" "$NF_BIN" "$NF_HYSTERIA_BIN"
+    if managed_service_healthy && managed_hysteria_healthy; then printf 'Services/listeners: healthy\n'
+    else die 'Services/listeners: unhealthy'; fi
 }
 cli_link() {
     cli_load_state
     node_link
+    hysteria_link
 }
 cli_restart() {
     cli_load_state
@@ -40,13 +46,15 @@ cli_restart() {
     fi
     timeout 30 systemctl restart "$NF_SERVICE" >/dev/null 2>&1 || die 'Xray restart failed or timed out'
     wait_managed_service || die 'Xray post-restart validation failed'
-    printf 'NodeForge: restarted; service and listener healthy\n'
+    timeout 30 systemctl restart "$NF_HYSTERIA_SERVICE" >/dev/null 2>&1 || die 'Hysteria restart failed or timed out'
+    managed_hysteria_healthy || die 'Hysteria post-restart validation failed'
+    printf 'NodeForge: restarted; services and listeners healthy\n'
 }
 cli_uninstall() {
     # Shared M1 uninstall transaction/ownership path; all modules already loaded.
     preflight uninstall
     [[ ! -e $NF_PENDING ]] || die 'Pending recovery requires the local source installer'
-    if [[ -e $NF_STATE || -L $NF_STATE ]]; then cli_load_state; fi
+    if [[ -e $NF_STATE || -L $NF_STATE || -e $NF_HYSTERIA_STATE || -L $NF_HYSTERIA_STATE ]]; then cli_load_state; fi
     init_workspace
     trap cleanup EXIT
     uninstall_nodeforge

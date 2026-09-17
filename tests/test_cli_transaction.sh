@@ -4,7 +4,7 @@ source "${NF_SOURCE:?}/tests/helpers/setup.sh"
 source "$NF_SOURCE/tests/helpers/mocks.sh"
 # Fail publishing the PATH entry after the runtime has been published.
 # Invoked indirectly by atomic_install.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 mv() {
     if [[ $* == *nodeforge.new.* ]]; then return 1; fi
     command mv "$@"

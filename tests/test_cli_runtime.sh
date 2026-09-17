@@ -52,6 +52,12 @@ NF_BIN=$NF_BIN_DIR/bin/xray NF_LICENSE=$NF_BIN_DIR/LICENSE.xray
 NF_CONFIG=$NF_CONFIG_DIR/xray.json NF_STATE=$NF_DATA_DIR/state.json
 NF_PENDING=$NF_DATA_DIR/pending
 NF_UNIT=$NF_TEST_ROOT/etc/systemd/system/nodeforge-xray.service
+NF_HYSTERIA_UNIT=$NF_TEST_ROOT/etc/systemd/system/nodeforge-hysteria.service
+NF_HYSTERIA_BIN=$NF_BIN_DIR/bin/hysteria
+NF_HYSTERIA_CONFIG=$NF_CONFIG_DIR/hysteria.yaml
+NF_HYSTERIA_CERT=$NF_CONFIG_DIR/hysteria.crt
+NF_HYSTERIA_KEY=$NF_CONFIG_DIR/hysteria.key
+NF_HYSTERIA_STATE=$NF_DATA_DIR/hysteria.json
 NF_CLI=$NF_TEST_ROOT/usr/local/bin/nodeforge
 FIXTURE
 # shellcheck disable=SC2016
