@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前协议范围为：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**状态：M1 COMPLETE；M2 COMPLETE。正式版本 `v0.2.1`，VERSION 为唯一版本来源。** 已完成本地 CLI、签名发行包、一行安装、NodeForge 自更新及 Xray 独立更新。当前交接和验收边界见 [docs/HANDOFF.md](docs/HANDOFF.md)。Debian 12 amd64 已实机验收，Ubuntu/arm64 尚未实机验证。
+**状态：M1 COMPLETE；M2 COMPLETE。正式版本 `v0.3.0`，VERSION 为唯一版本来源。** 已完成本地 CLI、签名发行包、一行安装、NodeForge 自更新及 Xray 独立更新。当前交接和验收边界见 [docs/HANDOFF.md](docs/HANDOFF.md)。Debian 12 amd64 已实机验收，Ubuntu/arm64 尚未实机验证。
 
 ## 平台
 
@@ -126,7 +126,7 @@ sudo bash uninstall.sh
 
 ## 本地管理命令
 
-本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.2.1`。
+本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.3.0`。
 
 | 命令 | 权限 | 实际行为 |
 | --- | --- | --- |

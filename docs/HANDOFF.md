@@ -1,10 +1,10 @@
 # NodeForge 交接快照
 
-**M1 COMPLETE；M2 COMPLETE。正式版本 v0.2.1，VERSION 为唯一版本来源。**
+**M1 COMPLETE；M2 COMPLETE。正式版本 v0.3.0，VERSION 为唯一版本来源。**
 
 M2 Phase 1 版本/state 基础、Phase 2 本地 CLI（含 dual-stack 修复）、Phase 3 Signed Release Bundle、Phase 4 One-line Bootstrap、Phase 5 NodeForge Self-Update、Xray Independent Update 均 COMPLETE。本轮仅版本及文档收尾，不进入 M3。
 
-官方仓库：https://github.com/shenzhenshes248-hash/NodeForge；主分支 master；正式 annotated tag：v0.2.1。Release assets：manifest.json、manifest.sig、nodeforge-v0.2.1.tar.gz。固定 Ed25519 公钥位于 trust/release-ed25519.pub，私钥保存在仓库之外，不提交或打包。
+官方仓库：https://github.com/shenzhenshes248-hash/NodeForge；主分支 master；正式 annotated tag：v0.3.0。Release assets：manifest.json、manifest.sig、nodeforge-v0.3.0.tar.gz。固定 Ed25519 公钥位于 trust/release-ed25519.pub，私钥保存在仓库之外，不提交或打包。
 
 协议仍为 VLESS + TCP/RAW + REALITY + XTLS Vision。state 仅支持 schema 1，无 schema 2 迁移。NodeForge update 只更新 runtime/CLI；Xray update 从官方 Releases（含 pre-release）按数字 CalVer 选择较新版本，不改变节点配置和凭据。
 
