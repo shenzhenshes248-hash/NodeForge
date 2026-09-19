@@ -1,0 +1,21 @@
+[Unit]
+Description=NodeForge cloudflared Quick Tunnel
+After=network-online.target nodeforge-argo-xray.service
+Wants=network-online.target nodeforge-argo-xray.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=nodeforge
+Group=nodeforge
+RuntimeDirectory=nodeforge-argo
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/python3 /usr/local/nodeforge/argo/runner.py /usr/local/nodeforge/argo/cloudflared /usr/local/nodeforge/argo/xray.json /usr/local/nodeforge/argo/cloudflared.yml /run/nodeforge-argo/current.json
+Restart=always
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -33,7 +33,7 @@ update_check_runtime() (
     cli_status >/dev/null
 )
 update_cleanup() {
-    local status=$?
+    local status=${1:-$?}
     trap - EXIT INT TERM
     if [[ ${NF_UPDATE_ACTIVE:-0} == 1 ]]; then
         if [[ ${NF_UPDATE_SWITCHED:-0} == 1 ]]; then

@@ -2,9 +2,9 @@
 
 NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实现 VLESS、REALITY 或 XTLS Vision 协议；协议和流量处理由未经修改的官方 [XTLS/Xray-core](https://github.com/XTLS/Xray-core) 实现。
 
-当前协议范围为：单节点、单凭据的 **VLESS + TCP/RAW + REALITY + XTLS Vision**。首次安装自动生成 UUID、X25519 密钥、shortId 和空闲 TCP 端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
+当前源码支持 **VLESS + TCP/RAW + REALITY + XTLS Vision**、HY2，以及独立的 **Argo Quick Tunnel VLESS + WS + TLS**。首次安装自动生成节点凭据和所需本地端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**状态：M1 COMPLETE；M2 COMPLETE。正式版本 `v0.3.0`，VERSION 为唯一版本来源。** 已完成本地 CLI、签名发行包、一行安装、NodeForge 自更新及 Xray 独立更新。当前交接和验收边界见 [docs/HANDOFF.md](docs/HANDOFF.md)。Debian 12 amd64 已实机验收，Ubuntu/arm64 尚未实机验证。
+**当前正式版本 `v0.4.0`，M4 COMPLETE。** 已加入 Argo Quick Tunnel、稳定 token 路径的三节点聚合订阅，以及可选 Argo edge address。M4 完整回归记录见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。Argo 结构见 [docs/M4_PHASE1.md](docs/M4_PHASE1.md)；已有 v0.3.0 使用 `sudo bash install.sh --argo` 本地加装。历史交接见 [docs/HANDOFF.md](docs/HANDOFF.md)。
 
 ## 平台
 

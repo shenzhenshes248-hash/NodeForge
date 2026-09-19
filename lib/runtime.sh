@@ -7,7 +7,9 @@ runtime_files() {
         lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh \
         lib/hysteria.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh \
         lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py \
-        tools/release.py trust/release-ed25519.pub
+        tools/release.py trust/release-ed25519.pub lib/argo.sh lib/argo_runtime.py \
+        templates/vless-ws.json templates/nodeforge-argo.service templates/nodeforge-argo-xray.service \
+        lib/subscription.sh lib/subscription.py templates/nodeforge-subscription.service
 }
 runtime_paths() {
     NF_APP=$NF_BIN_DIR/app

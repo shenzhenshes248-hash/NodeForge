@@ -1,0 +1,14 @@
+[Unit]
+Description=NodeForge current three-node subscription
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/nodeforge/subscription/server.py /etc/nodeforge/subscription.json
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

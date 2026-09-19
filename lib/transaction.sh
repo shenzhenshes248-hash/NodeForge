@@ -279,6 +279,8 @@ uninstall_nodeforge() {
     load_existing
     load_hysteria
     runtime_preuninstall
+    uninstall_subscription
+    uninstall_argo
     systemctl stop "$NF_HYSTERIA_SERVICE"
     systemctl disable "$NF_HYSTERIA_SERVICE"
     systemctl stop "$NF_SERVICE"

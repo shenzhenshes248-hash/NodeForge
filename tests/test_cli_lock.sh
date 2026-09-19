@@ -56,6 +56,8 @@ source "$NF_WORK/main-fixture.sh"
 preflight() { :; }
 install_dependencies() { [[ -n ${NF_LOCK_FD:-} && -f $NF_TEST_ROOT/nodeforge.lock ]]; }
 install_nodeforge() { [[ -n ${NF_LOCK_FD:-} ]]; }
+install_argo() { [[ -n ${NF_LOCK_FD:-} ]]; }
+install_subscription() { [[ -n ${NF_LOCK_FD:-} ]]; }
 unset NF_LOCK_FD
 ( main )
 printf 'PASS stable shared/exclusive lock, busy failure and install lock boundary (fixture flock)\n'

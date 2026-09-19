@@ -7,7 +7,7 @@ warn() { log WARN "$*"; }
 die() { log ERROR "$*"; exit 1; }
 load_modules() {
     local module
-    for module in defaults version state system xray hysteria reality config service transaction share runtime update cli; do
+    for module in defaults version state system xray hysteria reality config service transaction share runtime update argo subscription cli; do
         # Modules are linted individually by tests/run.sh.
         # shellcheck disable=SC1090,SC1091
         source "$NF_SOURCE/lib/$module.sh"
