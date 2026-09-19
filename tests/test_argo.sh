@@ -149,7 +149,7 @@ from urllib.parse import parse_qs, urlsplit
 lines = Path(sys.argv[1]).read_text().splitlines()
 assert len(lines) == 3
 url = urlsplit(lines[2])
-assert url.scheme == 'vless' and url.hostname == 'fresh.trycloudflare.com' and url.port == 443
+assert url.scheme == 'vless' and url.hostname == 'www.shopify.com' and url.port == 443
 query = parse_qs(url.query)
 assert query == dict(encryption=['none'], type=['ws'], security=['tls'],
                     sni=['fresh.trycloudflare.com'], host=['fresh.trycloudflare.com'], path=['/nodeforge-argo']), query

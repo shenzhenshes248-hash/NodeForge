@@ -100,10 +100,10 @@ argo_link() {
     fi
     uuid=$(jq -er '.inbounds[0].settings.clients[0].id' "$NF_ARGO_DIR/xray.json")
     path=$(jq -er '.inbounds[0].streamSettings.wsSettings.path' "$NF_ARGO_DIR/xray.json")
-    address=$domain
+    address=www.shopify.com
     if [[ -f $NF_CONFIG_DIR/argo-edge.json ]]; then
         address=$(jq -r '.address' "$NF_CONFIG_DIR/argo-edge.json")
-        address=${address:-$domain}
+        address=${address:-www.shopify.com}
     fi
     printf 'vless://%s@%s:443?encryption=none&type=ws&security=tls&sni=%s&host=%s&path=%s#NodeForge-Argo\n' \
         "$uuid" "$address" "$domain" "$domain" "$(uri_encode "$path")"

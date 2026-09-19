@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前源码支持 **VLESS + TCP/RAW + REALITY + XTLS Vision**、HY2，以及独立的 **Argo Quick Tunnel VLESS + WS + TLS**。首次安装自动生成节点凭据和所需本地端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
 
-**当前正式版本 `v0.4.0`，M4 COMPLETE。** 已加入 Argo Quick Tunnel、稳定 token 路径的三节点聚合订阅，以及可选 Argo edge address。M4 完整回归记录见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。Argo 结构见 [docs/M4_PHASE1.md](docs/M4_PHASE1.md)；已有 v0.3.0 使用 `sudo bash install.sh --argo` 本地加装。历史交接见 [docs/HANDOFF.md](docs/HANDOFF.md)。
+**当前正式版本 `v0.4.1`，M4 COMPLETE。** 已加入 Argo Quick Tunnel、稳定 token 路径的三节点聚合订阅，以及可选 Argo edge address。M4 完整回归记录见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。Argo 结构见 [docs/M4_PHASE1.md](docs/M4_PHASE1.md)；已有 v0.3.0 使用 `sudo bash install.sh --argo` 本地加装。历史交接见 [docs/HANDOFF.md](docs/HANDOFF.md)。
 
 ## 平台
 
