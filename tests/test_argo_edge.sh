@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+export MSYS2_ARG_CONV_EXCL=/nodeforge-argo
 source "${NF_SOURCE:?}/lib/common.sh"
 load_modules
 test_root=$(mktemp -d)
@@ -8,7 +9,7 @@ NF_CONFIG_DIR=$test_root
 NF_BIN_DIR=$test_root
 NF_UNIT=$test_root/unit
 mkdir "$test_root/argo"
-cp "$NF_SOURCE/templates/vless-ws.json" "$test_root/argo/xray.json"
+cp "$NF_SOURCE/templates/vless-xhttp.json" "$test_root/argo/xray.json"
 cli_load_state() { :; }
 load_argo() { :; }
 argo_current_domain() { printf 'current.trycloudflare.com\n'; }
@@ -30,7 +31,8 @@ url = urlsplit(link)
 query = parse_qs(url.query)
 assert url.scheme == 'vless' and url.hostname == expected and url.port == 443
 assert query['host'] == query['sni'] == ['current.trycloudflare.com']
-assert query['type'] == ['ws'] and query['security'] == ['tls']
+assert query['type'] == ['xhttp'] and query['security'] == ['tls']
+assert query['mode'] == ['packet-up'] and query['path'] == ['/nodeforge-argo']
 PY
 }
 check_address www.shopify.com

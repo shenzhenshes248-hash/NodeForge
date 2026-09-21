@@ -1,12 +1,12 @@
 {
   "log": {"loglevel": "warning"},
   "inbounds": [{
-    "tag": "argo-ws",
+    "tag": "argo-xhttp",
     "listen": "127.0.0.1",
     "port": 20001,
     "protocol": "vless",
     "settings": {"clients": [{"id": ""}], "decryption": "none"},
-    "streamSettings": {"network": "ws", "security": "none", "wsSettings": {"path": "/nodeforge-argo"}}
+    "streamSettings": {"network": "xhttp", "security": "none", "xhttpSettings": {"path": "/nodeforge-argo", "mode": "packet-up", "extra": {"noSSEHeader": true}}}
   }],
   "outbounds": [{"protocol": "freedom", "tag": "direct"}]
 }

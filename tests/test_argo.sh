@@ -4,8 +4,8 @@
 set -Eeuo pipefail
 source "${NF_SOURCE:?}/tests/helpers/setup.sh"
 source "$NF_SOURCE/tests/helpers/cli_mocks.sh"
-# Git Bash must not rewrite a WS URL path passed to Windows jq.exe.
-export MSYS2_ARG_CONV_EXCL=/nodeforge-argo
+# Git Bash must not rewrite an XHTTP URL path passed to Windows jq.exe.
+export MSYS2_ARG_CONV_EXCL='/nodeforge-argo;/existing-argo'
 
 # Keep the existing service fixture, adding independent Argo service state.
 eval "$(declare -f systemctl | sed '1s/systemctl/core_systemctl/')"
@@ -41,7 +41,7 @@ cat > "$NF_BIN" <<'CORE'
 #!/usr/bin/env bash
 case $1 in
     uuid) printf 'aaaa4567-e89b-42d3-a456-426614174000\n' ;;
-    run) jq -e '.inbounds[0].listen == "127.0.0.1" and .inbounds[0].streamSettings.network == "ws"' "$4" >/dev/null ;;
+    run) jq -e '.inbounds[0].listen == "127.0.0.1" and .inbounds[0].streamSettings.network == "xhttp"' "$4" >/dev/null ;;
 esac
 CORE
 write_state
@@ -88,10 +88,10 @@ common.write_text(common.read_text().replace('update argo subscription cli', 'up
 runtime = root / 'lib/runtime.sh'
 text = runtime.read_text()
 text = text.replace('tools/release.py trust/release-ed25519.pub lib/argo.sh lib/argo_runtime.py \\\n'
-                    '        templates/vless-ws.json templates/nodeforge-argo.service templates/nodeforge-argo-xray.service',
+                    '        templates/vless-xhttp.json templates/nodeforge-argo.service templates/nodeforge-argo-xray.service',
                     'tools/release.py trust/release-ed25519.pub')
 runtime.write_text(text)
-for file in ('lib/argo.sh', 'lib/argo_runtime.py', 'templates/vless-ws.json',
+for file in ('lib/argo.sh', 'lib/argo_runtime.py', 'templates/vless-xhttp.json',
              'templates/nodeforge-argo.service', 'templates/nodeforge-argo-xray.service'):
     (root / file).unlink()
 PY
@@ -127,6 +127,8 @@ load_argo
 [[ -f $NF_TEST_ROOT/nodeforge-argo.service.enabled && -f $NF_TEST_ROOT/nodeforge-argo-xray.service.enabled ]]
 jq -e --argjson reality "$NF_PORT" '.inbounds[0] | .listen == "127.0.0.1" and
     .port >= 1024 and .port != $reality and .streamSettings.security == "none" and
+    .streamSettings.network == "xhttp" and
+    .streamSettings.xhttpSettings == {path:"/nodeforge-argo",mode:"packet-up",extra:{noSSEHeader:true}} and
     (.settings.clients[0] | has("flow") | not)' "$NF_ARGO_DIR/xray.json" >/dev/null
 [[ $(jq -r '.inbounds[0].settings.clients[0].id' "$NF_ARGO_DIR/xray.json") != "$NF_UUID" ]]
 assert_eq "$core_hashes" "$(sha256sum "$NF_BIN" "$NF_CONFIG" "$NF_STATE" "$NF_HYSTERIA_CONFIG" "$NF_HYSTERIA_STATE")"
@@ -151,7 +153,7 @@ assert len(lines) == 3
 url = urlsplit(lines[2])
 assert url.scheme == 'vless' and url.hostname == 'www.shopify.com' and url.port == 443
 query = parse_qs(url.query)
-assert query == dict(encryption=['none'], type=['ws'], security=['tls'],
+assert query == dict(encryption=['none'], type=['xhttp'], mode=['packet-up'], security=['tls'],
                     sni=['fresh.trycloudflare.com'], host=['fresh.trycloudflare.com'], path=['/nodeforge-argo']), query
 PY
 subscription_content > "$NF_WORK/subscription"
@@ -170,6 +172,35 @@ assert edge.query == original.query and edge.username == original.username and e
 PY
 cli_argo_edge ''
 assert_eq "$(cat "$NF_WORK/links")" "$(subscription_content)"
+
+# Existing v0.4.1 runtime and WS inbound migrate in place, keeping identity/path.
+previous=$NF_APP/releases/v0.4.1
+mv "$NF_RUNTIME" "$previous"
+printf 'v0.4.1\n' > "$previous/VERSION"
+declare -f trusted_directory trusted_file >> "$previous/lib/runtime.sh"
+(
+    NF_NODEFORGE_VERSION=v0.4.1
+    runtime_paths
+    runtime_inventory "$previous" > "$previous/.inventory"
+    runtime_launcher > "$NF_CLI"
+)
+jq '.inbounds[0] |= (.tag="argo-ws" | .streamSettings={network:"ws",security:"none",wsSettings:{path:"/existing-argo"}})' \
+    "$NF_ARGO_DIR/xray.json" > "$NF_WORK/legacy-argo.json"
+cp "$NF_WORK/legacy-argo.json" "$NF_ARGO_DIR/xray.json"
+jq --arg sha "$(sha256_file "$NF_ARGO_DIR/xray.json")" '.files["xray.json"]=$sha' \
+    "$NF_ARGO_DIR/state.json" > "$NF_WORK/legacy-state.json"
+cp "$NF_WORK/legacy-state.json" "$NF_ARGO_DIR/state.json"
+install_argo > "$NF_WORK/migrated-argo"
+load_argo
+runtime_validate
+assert_eq "NodeForge $NF_NODEFORGE_VERSION" "$(bash "$NF_CLI" version)"
+assert_eq "$(jq -c '.inbounds[0] | {listen,port,settings}' "$NF_WORK/legacy-argo.json")" \
+    "$(jq -c '.inbounds[0] | {listen,port,settings}' "$NF_ARGO_DIR/xray.json")"
+jq -e '.inbounds[0].streamSettings == {network:"xhttp",security:"none",xhttpSettings:{path:"/existing-argo",mode:"packet-up",extra:{noSSEHeader:true}}}' \
+    "$NF_ARGO_DIR/xray.json" >/dev/null
+argo_status | grep -Fq 'XHTTP+TLS, packet-up'
+subscription_content | grep -Fq 'path=%2Fexisting-argo#NodeForge-Argo'
+assert_eq "$core_hashes" "$(sha256sum "$NF_BIN" "$NF_CONFIG" "$NF_STATE" "$NF_HYSTERIA_CONFIG" "$NF_HYSTERIA_STATE")"
 jq '.invocation_id="old"' "$NF_ARGO_CURRENT" > "$NF_WORK/stale"
 mv "$NF_WORK/stale" "$NF_ARGO_CURRENT"
 assert_eq "$before_links" "$(cli_link 2>/dev/null)"

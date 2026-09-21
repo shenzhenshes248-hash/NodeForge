@@ -25,7 +25,7 @@ class ArgoRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = root / 'xray.json'
-            data = json.loads((ROOT / 'templates/vless-ws.json').read_text())
+            data = json.loads((ROOT / 'templates/vless-xhttp.json').read_text())
             config.write_text(json.dumps(data))
             state = root / 'current.json'
             state.write_text('{"domain":"stale.trycloudflare.com"}')
@@ -92,7 +92,7 @@ class ArgoRuntimeTests(unittest.TestCase):
                     patch.object(argo.subprocess, 'Popen', return_value=Process()), \
                     patch.object(argo.signal, 'signal', side_effect=handlers.__setitem__), \
                     patch('sys.stdout', new=io.StringIO()):
-                argo.run('cloudflared', ROOT / 'templates/vless-ws.json', 'empty.yml', state)
+                argo.run('cloudflared', ROOT / 'templates/vless-xhttp.json', 'empty.yml', state)
             self.assertEqual(calls, ['terminated'])
             self.assertFalse(state.exists())
 
