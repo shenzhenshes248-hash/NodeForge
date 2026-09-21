@@ -25,8 +25,10 @@ class ArgoRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config = root / 'xray.json'
-            data = json.loads((ROOT / 'templates/vless-xhttp.json').read_text())
+            data = json.loads((ROOT / 'templates/vless-ws.json').read_text())
             config.write_text(json.dumps(data))
+            tunnel_config = root / 'cloudflared.yml'
+            tunnel_config.write_text('{}')
             state = root / 'current.json'
             state.write_text('{"domain":"stale.trycloudflare.com"}')
 
@@ -37,6 +39,9 @@ class ArgoRuntimeTests(unittest.TestCase):
                 yield 'INF Registered tunnel connection connIndex=0\n'
                 self.assertEqual(json.loads(state.read_text()), dict(
                     domain='first.trycloudflare.com', invocation_id='a' * 32))
+                yield 'ERR Request failed dest=https://first.trycloudflare.com/nodeforge-argo/session\n'
+                self.assertEqual(json.loads(state.read_text())['domain'],
+                                 'first.trycloudflare.com')
                 yield '| https://second.trycloudflare.com |\n'
                 self.assertFalse(state.exists())
                 yield 'INF Registered tunnel connection connIndex=0\n'
@@ -55,15 +60,17 @@ class ArgoRuntimeTests(unittest.TestCase):
             with patch.dict(os.environ, INVOCATION_ID='a' * 32), \
                     patch.object(argo.subprocess, 'Popen', return_value=Process()) as launch, \
                     patch.object(argo.signal, 'signal'), patch('sys.stdout', new=io.StringIO()):
-                self.assertEqual(argo.run('cloudflared', config, 'empty.yml', state), 7)
+                self.assertEqual(argo.run('cloudflared', config, str(tunnel_config), state), 7)
             self.assertFalse(state.exists())
             self.assertEqual(launch.call_args.args[0], [
-                'cloudflared', 'tunnel', '--config', 'empty.yml', '--no-autoupdate',
+                'cloudflared', 'tunnel', '--config', str(tunnel_config), '--no-autoupdate',
                 '--url', 'http://127.0.0.1:20001', '--loglevel', 'info'])
 
     def test_stop_clears_domain_and_forwards_signal(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / 'current.json'
+            tunnel_config = Path(directory) / 'cloudflared.yml'
+            tunnel_config.write_text('{}')
             handlers = {}
             calls = []
 
@@ -92,8 +99,42 @@ class ArgoRuntimeTests(unittest.TestCase):
                     patch.object(argo.subprocess, 'Popen', return_value=Process()), \
                     patch.object(argo.signal, 'signal', side_effect=handlers.__setitem__), \
                     patch('sys.stdout', new=io.StringIO()):
-                argo.run('cloudflared', ROOT / 'templates/vless-xhttp.json', 'empty.yml', state)
+                argo.run('cloudflared', ROOT / 'templates/vless-ws.json', str(tunnel_config), state)
             self.assertEqual(calls, ['terminated'])
+            self.assertFalse(state.exists())
+
+    def test_named_tunnel_publishes_configured_hostname_after_connection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'current.json'
+            config = Path(directory) / 'cloudflared.yml'
+            config.write_text(json.dumps({'tunnel': 'tunnel-id', 'ingress': [
+                {'hostname': 'nodeforge.example.com', 'service': 'http://127.0.0.1:20001'},
+                {'service': 'http_status:404'}]}))
+
+            def logs():
+                self.assertFalse(state.exists())
+                yield 'Registered tunnel connection\n'
+                self.assertEqual(json.loads(state.read_text()), dict(
+                    domain='nodeforge.example.com', invocation_id='c' * 32))
+                yield 'ERR Request failed dest=https://old.trycloudflare.com/path\n'
+                self.assertEqual(json.loads(state.read_text())['domain'], 'nodeforge.example.com')
+
+            class Process:
+                stdout = logs()
+
+                def wait(self):
+                    return 0
+
+                def poll(self):
+                    return 0
+
+            with patch.dict(os.environ, INVOCATION_ID='c' * 32), \
+                    patch.object(argo.subprocess, 'Popen', return_value=Process()) as launch, \
+                    patch.object(argo.signal, 'signal'), patch('sys.stdout', new=io.StringIO()):
+                argo.run('cloudflared', ROOT / 'templates/vless-xhttp.json', str(config), state)
+            self.assertEqual(launch.call_args.args[0], [
+                'cloudflared', 'tunnel', '--config', str(config), '--no-autoupdate',
+                '--loglevel', 'info', 'run', 'tunnel-id'])
             self.assertFalse(state.exists())
 
 

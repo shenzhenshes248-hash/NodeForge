@@ -2,9 +2,9 @@
 
 NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实现 VLESS、REALITY 或 XTLS Vision 协议；协议和流量处理由未经修改的官方 [XTLS/Xray-core](https://github.com/XTLS/Xray-core) 实现。
 
-当前源码支持 **VLESS + TCP/RAW + REALITY + XTLS Vision**、HY2，以及独立的 **Argo Quick Tunnel VLESS + XHTTP + TLS**。首次安装自动生成节点凭据和所需本地端口。没有使用 ArgoSBX、3x-ui 或其他第三方一键脚本的实现。
+当前源码提供两个安装 Profile：`ws`（Reality + HY2 + Argo WS / Quick Tunnel）和 `xhttp`（Reality + HY2 + Argo XHTTP / Named Tunnel）。每台 VPS 只运行其中一种 Argo，共三个节点；Reality/HY2、CLI、更新、签名与稳定订阅共用一套代码。
 
-**当前正式版本 `v0.4.1`；M5 源码开发版本 `v0.5.0-dev`（未发布）。** 现有 Argo 原地改为 XHTTP packet-up；从 v0.4.1 更新源码后执行 `sudo bash install.sh --argo`，保留 Argo UUID/端口/path 和订阅 URL，Reality/HY2 不变。 已加入 Argo Quick Tunnel、稳定 token 路径的三节点聚合订阅，以及可选 Argo edge address。M4 完整回归记录见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。Argo 结构见 [docs/M4_PHASE1.md](docs/M4_PHASE1.md)；已有 v0.3.0 使用 `sudo bash install.sh --argo` 本地加装。历史交接见 [docs/HANDOFF.md](docs/HANDOFF.md)。
+**当前正式版本 `v0.4.1`；当前源码 `v0.5.0-dev`，暂未发布。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
 
 ## 平台
 
@@ -31,6 +31,19 @@ curl -fsSL https://raw.githubusercontent.com/shenzhenshes248-hash/NodeForge/mast
 sudo bash install.sh --dry-run
 sudo bash install.sh
 ```
+
+两个 Profile 的源码安装命令：
+
+```bash
+sudo bash install.sh --profile ws
+sudo bash install.sh --profile xhttp \
+  --argo-domain nodeforge.example.com \
+  --argo-credentials /root/.cloudflared/TUNNEL_UUID.json
+```
+
+`ws` 保留 v0.4.1 的 Quick Tunnel、随机 `*.trycloudflare.com` 和 WS 分享格式。`xhttp` 需要已创建的 Named Tunnel、其 JSON 凭据，以及指向该 Tunnel 的 Cloudflare 代理 DNS 记录；安装器不创建 Cloudflare 账号、Tunnel 或 DNS。XHTTP 使用 `packet-up`，服务端 `noSSEHeader=false` 保持流式下行，仍只监听 `127.0.0.1`，不绑定动态 Host。两者默认 Address 均为 `www.shopify.com`，Host/SNI 使用各自隧道域名。
+
+同一 profile 重复安装会保留 Argo 身份和订阅 URL；不带参数也会识别旧版没有 profile 字段的 Argo。`--argo` / `--subscription` 入口继续可用。显式选择另一 profile 会在修改服务前停止；本次不提供原地切换。`--dry-run --profile ws|xhttp` 仅展示选择，不验证 Cloudflare 路由可用性。
 
 `--dry-run` 仅做只读的平台、权限和路径预检，不下载、不安装依赖、不生成节点、不修改 systemd；不代表网络或目标站点已通过验证。不要使用 `curl ... | bash` 执行未经审阅的远程脚本。
 

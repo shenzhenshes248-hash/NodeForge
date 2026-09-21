@@ -12,7 +12,33 @@ argo_paths() {
     NF_ARGO_CURRENT=${NF_ARGO_CURRENT:-/run/nodeforge-argo/current.json}
 }
 
-argo_files() { printf '%s\n' cloudflared xray xray.json cloudflared.yml runner.py state.json; }
+argo_files() { printf '%s\n' cloudflared xray xray.json cloudflared.yml runner.py state.json credentials.json; }
+
+argo_profile_load() {
+    case $1 in
+        ws) source "$NF_SOURCE/lib/argo_ws.sh" ;;
+        xhttp) source "$NF_SOURCE/lib/argo_xhttp.sh" ;;
+        *) die 'Profile must be ws or xhttp' ;;
+    esac
+}
+
+argo_installed_profile() {
+    jq -er '.inbounds[0].streamSettings.network | select(. == "ws" or . == "xhttp")' "$NF_ARGO_DIR/xray.json"
+}
+
+argo_select_profile() {
+    argo_paths
+    local installed requested=${NF_REQUESTED_PROFILE:-}
+    if [[ -e $NF_ARGO_DIR || -L $NF_ARGO_DIR ]]; then
+        load_argo
+        installed=$(argo_installed_profile) || die 'Unsupported installed Argo transport'
+        [[ -z $requested || $requested == "$installed" ]] || die "Installed profile is $installed; in-place profile switching is not supported"
+        NF_PROFILE=$installed
+    else
+        NF_PROFILE=${requested:-ws}
+    fi
+    argo_profile_load "$NF_PROFILE"
+}
 
 fetch_cloudflared() {
     local asset expected version
@@ -54,7 +80,7 @@ PY
     )
     jq --arg uuid "$uuid" --argjson port "$port" \
         '.inbounds[0].port=$port | .inbounds[0].settings.clients[0].id=$uuid' \
-        "$NF_SOURCE/templates/vless-xhttp.json" > "$NF_WORK/argo-xray.json"
+        "$(argo_profile_template)" > "$NF_WORK/argo-xray.json"
     test_xray_config "$NF_BIN" "$NF_WORK/argo-xray.json"
 }
 
@@ -69,8 +95,13 @@ load_argo() {
         trusted_file "$NF_ARGO_DIR/$file"
         [[ $(sha256_file "$NF_ARGO_DIR/$file") == "$(jq -er --arg file "$file" '.files[$file]' "$NF_ARGO_DIR/state.json")" ]] || die "Argo $file changed outside NodeForge"
     done
-    cmp -s "$NF_ARGO_UNIT" "$NF_SOURCE/templates/nodeforge-argo.service" || die 'Unsupported Argo unit'
-    cmp -s "$NF_ARGO_XRAY_UNIT" "$NF_SOURCE/templates/nodeforge-argo-xray.service" || die 'Unsupported Argo Xray unit'
+    if jq -e '.tunnel_domain != null' "$NF_ARGO_DIR/state.json" >/dev/null; then
+        trusted_file "$NF_ARGO_DIR/credentials.json"
+        [[ $(sha256_file "$NF_ARGO_DIR/credentials.json") == "$(jq -er '.files["credentials.json"]' "$NF_ARGO_DIR/state.json")" ]] || die 'Argo tunnel credentials changed outside NodeForge'
+    fi
+    # v0.4.1 and early M5 differ only in their human-readable descriptions.
+    cmp -s <(sed '/^Description=/d' "$NF_ARGO_UNIT") <(sed '/^Description=/d' "$NF_SOURCE/templates/nodeforge-argo.service") || die 'Unsupported Argo unit'
+    cmp -s <(sed '/^Description=/d' "$NF_ARGO_XRAY_UNIT") <(sed '/^Description=/d' "$NF_SOURCE/templates/nodeforge-argo-xray.service") || die 'Unsupported Argo Xray unit'
 }
 
 argo_current_domain() {
@@ -81,8 +112,13 @@ argo_current_domain() {
     [[ $invocation =~ ^[0-9a-f]{32}$ ]] || return 1
     domain=$(jq -er --arg invocation "$invocation" \
         'select(.invocation_id == $invocation) | .domain |
-         select(test("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.trycloudflare\\.com$"))' \
+         select(test("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"))' \
         "$NF_ARGO_CURRENT" 2>/dev/null) || return 1
+    if jq -e '.tunnel_domain != null' "$NF_ARGO_DIR/state.json" >/dev/null; then
+        [[ $domain == "$(jq -er '.tunnel_domain' "$NF_ARGO_DIR/state.json")" ]] || return 1
+    else
+        [[ $domain == *.trycloudflare.com ]] || return 1
+    fi
     # Do not emit the previous process's address across a service restart.
     [[ $(systemctl show "$NF_ARGO_SERVICE" -p InvocationID --value) == "$invocation" ]] || return 1
     printf '%s\n' "$domain"
@@ -99,14 +135,15 @@ argo_link() {
         return 0
     fi
     uuid=$(jq -er '.inbounds[0].settings.clients[0].id' "$NF_ARGO_DIR/xray.json")
-    path=$(jq -er '.inbounds[0].streamSettings.xhttpSettings.path' "$NF_ARGO_DIR/xray.json")
+    argo_profile_load "$(argo_installed_profile)"
+    path=$(argo_profile_path)
     address=www.shopify.com
     if [[ -f $NF_CONFIG_DIR/argo-edge.json ]]; then
         address=$(jq -r '.address' "$NF_CONFIG_DIR/argo-edge.json")
         address=${address:-www.shopify.com}
     fi
-    printf 'vless://%s@%s:443?encryption=none&type=xhttp&mode=packet-up&security=tls&sni=%s&host=%s&path=%s#NodeForge-Argo\n' \
-        "$uuid" "$address" "$domain" "$domain" "$(uri_encode "$path")"
+    printf 'vless://%s@%s:443?encryption=none&%s&security=tls&sni=%s&host=%s&path=%s#NodeForge-Argo\n' \
+        "$uuid" "$address" "$(argo_profile_query)" "$domain" "$domain" "$(uri_encode "$path")"
 }
 
 argo_status() {
@@ -114,7 +151,9 @@ argo_status() {
     [[ -d $NF_ARGO_DIR ]] || return 0
     local domain
     if ! (load_argo) >/dev/null 2>&1; then printf 'Argo: invalid state\n'
-    elif domain=$(argo_current_domain); then printf 'Argo: active (%s:443, XHTTP+TLS, packet-up)\n' "$domain"
+    elif domain=$(argo_current_domain); then
+        argo_profile_load "$(argo_installed_profile)"
+        printf 'Argo: active (%s:443, %s)\n' "$domain" "$(argo_profile_label)"
     else printf 'Argo: pending/offline (Reality/HY2 independent)\n'; fi
 }
 
@@ -141,14 +180,6 @@ uninstall_argo() {
 argo_install_cleanup() {
     local status=$?
     trap - EXIT INT TERM
-    if [[ ${NF_ARGO_MIGRATING:-0} == 1 ]]; then
-        if ! { restore_snapshot_file "$NF_WORK/old-argo-xray.json" "$NF_ARGO_DIR/xray.json" &&
-            restore_snapshot_file "$NF_WORK/old-argo-state.json" "$NF_ARGO_DIR/state.json" &&
-            systemctl restart "$NF_ARGO_XRAY_SERVICE"; }; then
-                log ERROR "Argo restore failed; recovery files retained at $NF_WORK"
-                exit 1
-        fi
-    fi
     if [[ ${NF_ARGO_CREATED:-0} == 1 ]]; then
         remove_argo_files || { log ERROR 'Argo cleanup incomplete; existing Reality/HY2 preserved'; status=1; }
     fi
@@ -164,7 +195,7 @@ argo_prepare_runtime() {
     trusted_file "$NF_CLI"
     version=$(bash "$NF_CLI" version)
     version=${version#NodeForge }
-    case $version in v0.3.0|v0.4.0-dev|v0.4.1) ;; *) die 'Unsupported source upgrade baseline' ;; esac
+    case $version in v0.3.0|v0.4.0-dev|v0.4.1|v0.4.1-dev) ;; *) die 'Unsupported source upgrade baseline' ;; esac
     previous=$NF_APP/releases/$version
     [[ -d $previous && ! -e $NF_RUNTIME_STAGE ]] || die 'Expected installed baseline runtime'
     trusted_file "$previous/lib/runtime.sh"
@@ -186,7 +217,8 @@ argo_prepare_runtime() {
 
 install_argo() (
     cli_load_state
-    argo_paths
+    argo_select_profile
+    argo_profile_validate
     init_workspace
     trap argo_install_cleanup EXIT
     trap 'exit 130' INT
@@ -194,29 +226,13 @@ install_argo() (
     local file
     if [[ -e $NF_ARGO_DIR || -L $NF_ARGO_DIR ]]; then
         load_argo
-        if [[ $(jq -r '.inbounds[0].streamSettings.network' "$NF_ARGO_DIR/xray.json") == ws ]]; then
-            jq '.inbounds[0] |= (.tag="argo-xhttp" |
-                .streamSettings={network:"xhttp",security:"none",xhttpSettings:{
-                    path:.streamSettings.wsSettings.path,mode:"packet-up",extra:{noSSEHeader:true}}})' \
-                "$NF_ARGO_DIR/xray.json" > "$NF_WORK/argo-xray.json"
-            test_xray_config "$NF_ARGO_DIR/xray" "$NF_WORK/argo-xray.json"
-            cp -p "$NF_ARGO_DIR/xray.json" "$NF_WORK/old-argo-xray.json"
-            cp -p "$NF_ARGO_DIR/state.json" "$NF_WORK/old-argo-state.json"
-        fi
     else
         [[ ! -e $NF_ARGO_UNIT && ! -L $NF_ARGO_UNIT && ! -e $NF_ARGO_XRAY_UNIT && ! -L $NF_ARGO_XRAY_UNIT ]] || die 'Unmanaged Argo units exist'
         fetch_cloudflared
         generate_argo_config
+        argo_profile_prepare
     fi
     argo_prepare_runtime
-    if [[ -f $NF_WORK/old-argo-xray.json ]]; then
-        jq --arg sha "$(sha256_file "$NF_WORK/argo-xray.json")" '.files["xray.json"]=$sha' \
-            "$NF_ARGO_DIR/state.json" > "$NF_WORK/argo-state.json"
-        NF_ARGO_MIGRATING=1
-        atomic_install "$NF_WORK/argo-xray.json" "$NF_ARGO_DIR/xray.json" 640 root nodeforge
-        atomic_install "$NF_WORK/argo-state.json" "$NF_ARGO_DIR/state.json" 600 root root
-        systemctl restart "$NF_ARGO_XRAY_SERVICE"
-    fi
     if [[ ! -d $NF_ARGO_DIR ]]; then
         install -d -m 750 -o root -g nodeforge "$NF_ARGO_DIR"
         NF_ARGO_CREATED=1
@@ -225,8 +241,10 @@ install_argo() (
         atomic_install "$NF_BIN" "$NF_ARGO_DIR/xray" 755 root root
         atomic_install "$NF_WORK/argo-xray.json" "$NF_ARGO_DIR/xray.json" 640 root nodeforge
         atomic_install "$NF_SOURCE/lib/argo_runtime.py" "$NF_ARGO_DIR/runner.py" 644 root root
-        printf '{}\n' > "$NF_WORK/cloudflared.yml"
         atomic_install "$NF_WORK/cloudflared.yml" "$NF_ARGO_DIR/cloudflared.yml" 644 root root
+        if [[ $NF_PROFILE == xhttp ]]; then
+            atomic_install "$NF_WORK/credentials.json" "$NF_ARGO_DIR/credentials.json" 640 root nodeforge
+        fi
         atomic_install "$NF_SOURCE/templates/nodeforge-argo.service" "$NF_ARGO_UNIT" 644 root root
         atomic_install "$NF_SOURCE/templates/nodeforge-argo-xray.service" "$NF_ARGO_XRAY_UNIT" 644 root root
         printf '{}\n' > "$NF_WORK/argo-files.json"
@@ -235,8 +253,15 @@ install_argo() (
                 '. + {($file):$sha}' "$NF_WORK/argo-files.json" > "$NF_WORK/argo-files.new"
             mv "$NF_WORK/argo-files.new" "$NF_WORK/argo-files.json"
         done
-        jq -n --arg version "$NF_CLOUDFLARED_VERSION" --slurpfile files "$NF_WORK/argo-files.json" \
-            '{owner:"NodeForge",schema:1,cloudflared_version:$version,files:$files[0]}' > "$NF_WORK/argo-state.json"
+        if [[ $NF_PROFILE == xhttp ]]; then
+            jq --arg sha "$(sha256_file "$NF_ARGO_DIR/credentials.json")" '. + {"credentials.json":$sha}' \
+                "$NF_WORK/argo-files.json" > "$NF_WORK/argo-files.new"
+            mv "$NF_WORK/argo-files.new" "$NF_WORK/argo-files.json"
+        fi
+        jq -n --arg version "$NF_CLOUDFLARED_VERSION" --arg profile "$NF_PROFILE" \
+            --arg domain "${NF_ARGO_DOMAIN:-}" --slurpfile files "$NF_WORK/argo-files.json" \
+            '{owner:"NodeForge",schema:1,profile:$profile,cloudflared_version:$version,files:$files[0]} +
+             (if $profile == "xhttp" then {tunnel_domain:$domain} else {} end)' > "$NF_WORK/argo-state.json"
         atomic_install "$NF_WORK/argo-state.json" "$NF_ARGO_DIR/state.json" 600 root root
         timeout 20 runuser -u nodeforge -- "$NF_ARGO_DIR/xray" run -test -config "$NF_ARGO_DIR/xray.json" >/dev/null 2>&1 || die 'Argo Xray configuration test failed'
     fi
@@ -250,7 +275,7 @@ install_argo() (
         NF_UPDATE_SWITCHED=1
         atomic_install "$NF_WORK/new-launcher" "$NF_CLI" 755 root root
     fi
-    NF_UPDATE_ACTIVE=0 NF_ARGO_CREATED=0 NF_ARGO_MIGRATING=0
-    info 'Argo installed and enabled; Quick Tunnel connects asynchronously'
+    NF_UPDATE_ACTIVE=0 NF_ARGO_CREATED=0
+    info 'Argo installed and enabled; tunnel connects asynchronously'
     argo_link
 )

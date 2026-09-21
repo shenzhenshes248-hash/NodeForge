@@ -1,5 +1,5 @@
 [Unit]
-Description=NodeForge Argo Xray (VLESS WebSocket loopback)
+Description=NodeForge Argo Xray (VLESS loopback)
 After=network.target
 StartLimitIntervalSec=0
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=NodeForge cloudflared Quick Tunnel
+Description=NodeForge cloudflared Tunnel
 After=network-online.target nodeforge-argo-xray.service
 Wants=network-online.target nodeforge-argo-xray.service
 StartLimitIntervalSec=0

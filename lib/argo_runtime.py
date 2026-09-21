@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one Quick Tunnel and publish only this invocation's current hostname."""
+"""Run one managed tunnel and publish only this invocation's hostname."""
 import json
 import os
 from pathlib import Path
@@ -22,12 +22,23 @@ def publish(path, domain, invocation):
     temporary.replace(path)
 
 
-def run(binary, config, empty_config, state):
+def run(binary, config, tunnel_config, state):
     state = Path(state)
     state.unlink(missing_ok=True)
     inbound = json.loads(Path(config).read_text())['inbounds'][0]
     if inbound['listen'] != '127.0.0.1' or not 1024 <= inbound['port'] <= 65535:
         raise ValueError('Argo requires an unprivileged loopback port')
+    tunnel = json.loads(Path(tunnel_config).read_text())
+    command = [binary, 'tunnel', '--config', tunnel_config, '--no-autoupdate']
+    hostname = None
+    if tunnel.get('tunnel'):
+        route = tunnel['ingress'][0]
+        hostname = route['hostname']
+        if route['service'] != f"http://127.0.0.1:{inbound['port']}":
+            raise ValueError('Named Tunnel origin must match the Argo loopback port')
+        command += ['--loglevel', 'info', 'run', tunnel['tunnel']]
+    else:
+        command += ['--url', f"http://127.0.0.1:{inbound['port']}", '--loglevel', 'info']
     invocation = os.environ['INVOCATION_ID']
     child = None
     stopping = False
@@ -43,17 +54,16 @@ def run(binary, config, empty_config, state):
     signal.signal(signal.SIGINT, stop)
     try:
         child = subprocess.Popen(
-            [binary, 'tunnel', '--config', empty_config, '--no-autoupdate',
-             '--url', f"http://127.0.0.1:{inbound['port']}", '--loglevel', 'info'],
+            command,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
             encoding='utf-8', errors='replace', bufsize=1)
         if stopping:
             child.terminate()
-        domain = None
+        domain = hostname
         for line in child.stdout:
             print(line, end='', flush=True)
-            current = tunnel_domain(line)
-            if current and not stopping:
+            current = None if hostname else tunnel_domain(line)
+            if current and current != domain and not stopping:
                 domain = current
                 # Clear the previous URL while a newly announced tunnel connects.
                 state.unlink(missing_ok=True)
