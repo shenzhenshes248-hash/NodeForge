@@ -47,7 +47,7 @@ class BootstrapTests(unittest.TestCase):
                     continue
                 data = original.extractfile(member).read()
                 if member.name.endswith('/install.sh'):
-                    data = b'#!/bin/bash\nprintf invoked > "$BOOT_MARKER"\nexit "${BOOT_INSTALL_RC:-0}"\n'
+                    data = b'#!/bin/bash\nprintf invoked > "$BOOT_MARKER"\nprintf "%s\\0" "$@" > "$BOOT_MARKER.args"\nexit "${BOOT_INSTALL_RC:-0}"\n'
                 member = copy.copy(member)
                 member.size = len(data)
                 target.addfile(member, io.BytesIO(data))
@@ -61,7 +61,7 @@ class BootstrapTests(unittest.TestCase):
             signature.unlink()
         release.sign(manifest, self.private, signature)
 
-    def run_bootstrap(self, fail_download='', installer_rc='0'):
+    def run_bootstrap(self, fail_download='', installer_rc='0', args=()):
         script = (ROOT / 'bootstrap.sh').read_text()
         # Only the isolated test copy gets a fixture anchor and platform/download mocks.
         script = script.replace(release.TRUST_ANCHOR.read_text().strip(), self.public.read_text().strip())
@@ -88,13 +88,20 @@ curl() {
         env = dict(os.environ, BOOT_TMP=self.work.as_posix(),
                    BOOT_ASSETS=self.assets.as_posix(), BOOT_MARKER=self.marker.as_posix(),
                    BOOT_FAIL_DOWNLOAD=fail_download, BOOT_INSTALL_RC=installer_rc, BOOT_VERSION=self.version)
-        result = subprocess.run(['bash', '-s'], input=mocks + script, env=env, text=True,
+        result = subprocess.run(['bash', '-s', '--', *args], input=mocks + script, env=env, text=True,
                                 capture_output=True, timeout=60)
         self.assertFalse(list(self.work.glob('work-*')), 'bootstrap temporary directory leaked')
         return result
 
     def test_generated_entry_matches_sources(self):
         self.assertEqual(build_bootstrap.render(), (ROOT / 'bootstrap.sh').read_text())
+
+    def test_installer_arguments_pass_through(self):
+        for args in ((), ('--profile', 'xhttp'), ('--profile', 'xhttp', '--argo-credentials', '/tmp/tunnel credentials.json')):
+            with self.subTest(args=args):
+                result = self.run_bootstrap(args=args)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual(('\0'.join(args) + '\0').encode(), Path(str(self.marker) + '.args').read_bytes())
 
     def test_success_and_installer_failure_cleanup(self):
         result = self.run_bootstrap()

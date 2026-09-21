@@ -6,7 +6,6 @@ umask 077
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 bootstrap_main() {
-    (( $# == 0 )) || { printf 'Bootstrap takes no arguments\n' >&2; return 1; }
     [[ $(id -u) == 0 ]] || { printf 'Run bootstrap as root\n' >&2; return 1; }
     if [[ $(uname -m) != x86_64 ]] || ! grep -qx 'ID=debian' /etc/os-release ||
         ! grep -qx 'VERSION_ID="12"' /etc/os-release; then
@@ -249,7 +248,7 @@ NODEFORGE_VERIFIER
             printf 'Incomplete release bundle\n' >&2; return 1;
         }
     done
-    bash "$source/install.sh" </dev/null
+    bash "$source/install.sh" "$@" </dev/null
 }
 
 bootstrap_main "$@"
