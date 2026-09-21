@@ -19,5 +19,6 @@ done
 "${PYTHON:-python3}" tests/test_bootstrap.py
 "${PYTHON:-python3}" tests/test_update.py
 "${PYTHON:-python3}" tests/test_argo_runtime.py
+"${PYTHON:-python3}" tests/test_argo_provision.py
 "${PYTHON:-python3}" tests/test_subscription.py
 printf 'PASS: ShellCheck, bash syntax, %s isolated suites\n' "$count"

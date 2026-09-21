@@ -15,15 +15,24 @@ argo_profile_validate() {
         fi
         return
     fi
-    [[ -n ${NF_ARGO_DOMAIN:-} && -n ${NF_ARGO_CREDENTIALS:-} ]] || die 'XHTTP requires --argo-domain and --argo-credentials (Named Tunnel JSON)'
-    [[ $NF_ARGO_DOMAIN =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ && ! $NF_ARGO_DOMAIN =~ ^[0-9.]+$ ]] || die 'Invalid Named Tunnel hostname'
+    if [[ -n ${NF_ARGO_DOMAIN:-} ]]; then
+        [[ $NF_ARGO_DOMAIN =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ && ! $NF_ARGO_DOMAIN =~ ^[0-9.]+$ ]] || die 'Invalid Named Tunnel hostname'
+    fi
+    [[ -n ${NF_ARGO_CREDENTIALS:-} ]] || return 0
+    [[ -n ${NF_ARGO_DOMAIN:-} ]] || die '--argo-credentials requires --argo-domain'
     require_regular "$NF_ARGO_CREDENTIALS"
     jq -e '(.TunnelID | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")) and
         (.AccountTag | type == "string" and length > 0) and (.TunnelSecret | type == "string" and length > 0)' \
         "$NF_ARGO_CREDENTIALS" >/dev/null || die 'Invalid Named Tunnel credentials JSON'
 }
 argo_profile_prepare() {
-    cp "$NF_ARGO_CREDENTIALS" "$NF_WORK/credentials.json"
+    if [[ -n ${NF_ARGO_CREDENTIALS:-} ]]; then
+        cp "$NF_ARGO_CREDENTIALS" "$NF_WORK/credentials.json"
+    else
+        python3 "$NF_SOURCE/lib/argo_provision.py" --cloudflared "$NF_WORK/cloudflared" \
+            --output "$NF_WORK" --domain "${NF_ARGO_DOMAIN:-}"
+        NF_ARGO_DOMAIN=$(jq -er '.domain' "$NF_WORK/named-tunnel.json")
+    fi
     chmod 600 "$NF_WORK/credentials.json"
     jq -n --arg tunnel "$(jq -er '.TunnelID' "$NF_WORK/credentials.json")" \
         --arg credentials "$NF_ARGO_DIR/credentials.json" --arg domain "$NF_ARGO_DOMAIN" \

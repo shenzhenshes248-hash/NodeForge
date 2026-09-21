@@ -36,12 +36,10 @@ sudo bash install.sh
 
 ```bash
 sudo bash install.sh --profile ws
-sudo bash install.sh --profile xhttp \
-  --argo-domain nodeforge.example.com \
-  --argo-credentials /root/.cloudflared/TUNNEL_UUID.json
+sudo bash install.sh --profile xhttp
 ```
 
-`ws` 保留 v0.4.1 的 Quick Tunnel、随机 `*.trycloudflare.com` 和 WS 分享格式。`xhttp` 需要已创建的 Named Tunnel、其 JSON 凭据，以及指向该 Tunnel 的 Cloudflare 代理 DNS 记录；安装器不创建 Cloudflare 账号、Tunnel 或 DNS。XHTTP 使用 `packet-up`，服务端 `noSSEHeader=false` 保持流式下行，仍只监听 `127.0.0.1`，不绑定动态 Host。两者默认 Address 均为 `www.shopify.com`，Host/SNI 使用各自隧道域名。
+`ws` 保留 v0.4.1 的 Quick Tunnel、随机 `*.trycloudflare.com` 和 WS 分享格式。`xhttp` 首次安装唯一的 Cloudflare 操作是打开安装器给出的授权链接，登录并选择账号中已接入 Cloudflare 的域名，点击授权。安装器随后自动创建 Named Tunnel、专属子域名的代理 DNS、凭据和服务；重试复用已保存的授权和 Tunnel。可用 `--argo-domain nodeforge.example.com` 指定该域名下的子域名；已有 Tunnel 仍支持配合 `--argo-credentials /root/.cloudflared/TUNNEL_UUID.json` 使用。XHTTP 使用 `packet-up`，服务端 `noSSEHeader=false` 保持流式下行，仍只监听 `127.0.0.1`，不绑定动态 Host。两者默认 Address 均为 `www.shopify.com`，Host/SNI 使用各自隧道域名。
 
 同一 profile 重复安装会保留 Argo 身份和订阅 URL；不带参数也会识别旧版没有 profile 字段的 Argo。`--argo` / `--subscription` 入口继续可用。显式选择另一 profile 会在修改服务前停止；本次不提供原地切换。`--dry-run --profile ws|xhttp` 仅展示选择，不验证 Cloudflare 路由可用性。
 

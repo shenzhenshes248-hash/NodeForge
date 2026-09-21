@@ -8,7 +8,7 @@ runtime_files() {
         lib/hysteria.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh \
         lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py \
         tools/release.py trust/release-ed25519.pub lib/argo.sh lib/argo_runtime.py \
-        lib/argo_ws.sh lib/argo_xhttp.sh templates/vless-ws.json templates/vless-xhttp.json \
+        lib/argo_ws.sh lib/argo_xhttp.sh lib/argo_provision.py templates/vless-ws.json templates/vless-xhttp.json \
         templates/nodeforge-argo.service templates/nodeforge-argo-xray.service \
         lib/subscription.sh lib/subscription.py templates/nodeforge-subscription.service
 }
