@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前源码提供两个安装 Profile：`ws`（Reality + HY2 + Argo WS / Quick Tunnel）和 `xhttp`（Reality + HY2 + Argo XHTTP / Named Tunnel）。每台 VPS 只运行其中一种 Argo，共三个节点；Reality/HY2、CLI、更新、签名与稳定订阅共用一套代码。
 
-**当前正式版本 `v0.5.0`。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
+**当前正式版本 `v0.5.1`。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
 
 ## 平台
 
