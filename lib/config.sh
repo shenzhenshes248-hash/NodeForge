@@ -60,6 +60,7 @@ generate_config() {
          (.target=$target | .serverNames=[$sni] | .privateKey=$private | .shortIds=[$sid])' \
         "$NF_SOURCE/templates/vless-reality.json" > "$output"
     chmod 600 "$output"
+    warp_generate_xray "$output"
     rm -f -- "$NF_WORK/private-key"
     jq -e . "$output" >/dev/null
 }

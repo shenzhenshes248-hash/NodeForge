@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 cli_help() {
-    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  info\n  link\n  argo-edge <address|"">\n  restart\n  uninstall\n  update\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
+    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  info\n  link\n  argo-edge <address|"">\n  warp <enable|disable|status>\n  restart\n  uninstall\n  update\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
 }
 cli_require_root() { (( EUID == 0 )) || die 'NodeForge: this command must be run as root'; }
 cli_load_state() {
@@ -70,6 +70,14 @@ cli_uninstall() {
     uninstall_nodeforge
 }
 cli_main() {
+    if [[ ${1:-} == warp ]]; then
+        (( $# == 2 )) || die 'Usage: nodeforge warp <enable|disable|status>'
+        case $2 in enable|disable|status) ;; *) die 'Usage: nodeforge warp <enable|disable|status>' ;; esac
+        cli_require_root
+        if [[ $2 == status ]]; then acquire_lock shared; else acquire_lock; fi
+        cli_warp "$2"
+        return
+    fi
     if [[ ${1:-} == argo-edge ]]; then
         (( $# == 2 )) || die 'Usage: nodeforge argo-edge <address|"">'
         cli_require_root

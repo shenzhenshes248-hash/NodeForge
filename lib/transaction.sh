@@ -279,6 +279,11 @@ uninstall_nodeforge() {
     load_existing
     load_hysteria
     runtime_preuninstall
+    warp_load
+    if [[ -e $NF_WARP_STATE ]]; then
+        if command -v warp-cli >/dev/null; then warp_cli disconnect >/dev/null; fi
+        rm -f -- "$NF_WARP_STATE"
+    fi
     uninstall_subscription
     uninstall_argo
     systemctl stop "$NF_HYSTERIA_SERVICE"

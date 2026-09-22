@@ -7,7 +7,7 @@ warn() { log WARN "$*"; }
 die() { log ERROR "$*"; exit 1; }
 load_modules() {
     local module
-    for module in defaults version state system xray hysteria reality config service transaction share runtime update argo subscription cli; do
+    for module in defaults version state system xray hysteria reality config service transaction share runtime update argo subscription warp cli; do
         # Modules are linted individually by tests/run.sh.
         # shellcheck disable=SC1090,SC1091
         source "$NF_SOURCE/lib/$module.sh"
@@ -17,7 +17,7 @@ load_modules() {
 }
 init_workspace() { NF_WORK=$(mktemp -d); chmod 700 "$NF_WORK"; }
 cleanup() {
-    local status=$?
+    local status=${1:-$?}
     trap - EXIT ERR INT TERM
     if [[ ${NF_TRANSACTION:-0} == 1 ]]; then
         if ! rollback; then

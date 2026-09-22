@@ -34,6 +34,48 @@ def hostname(value):
                     for part in value.split('.')))
 
 
+def warp_xray(config, enabled):
+    """Only the two NodeForge outbound policies are accepted; preserve inbounds."""
+    direct = [{'tag': 'direct', 'protocol': 'freedom'}]
+    proxy = [
+        {'tag': 'warp', 'protocol': 'socks',
+         'settings': {'servers': [{'address': '127.0.0.1', 'port': 40000}]}},
+        {'tag': 'warp-block', 'protocol': 'blackhole'},
+    ]
+    routing = {'rules': [{'type': 'field', 'network': 'udp', 'outboundTag': 'warp-block'}]}
+    if config.get('outbounds') == direct and 'routing' not in config:
+        pass
+    elif config.get('outbounds') == proxy and config.get('routing') == routing:
+        pass
+    else:
+        raise ValueError('unsupported outbound policy')
+    config['outbounds'] = proxy if enabled else direct
+    if enabled:
+        config['routing'] = routing
+    else:
+        config.pop('routing', None)
+    return config
+
+
+WARP_HYSTERIA = ('# NodeForge WARP outbound\n'
+                 'disableUDP: true\n'
+                 'outbounds:\n'
+                 '  - name: warp\n'
+                 '    type: socks5\n'
+                 '    socks5:\n'
+                 '      addr: 127.0.0.1:40000\n')
+
+
+def warp_hysteria(text, enabled):
+    if text.endswith(WARP_HYSTERIA):
+        text = text[:-len(WARP_HYSTERIA)]
+    # The managed base has only listen, tls and auth. Never silently keep an ACL
+    # or a second outbound that could bypass the selected egress.
+    if re.search(r'^(?:outbounds|acl|disableUDP):', text, re.MULTILINE):
+        raise ValueError('unsupported Hysteria outbound policy')
+    return text + WARP_HYSTERIA if enabled else text
+
+
 def validate_state(state_path, config_path, template_path, derive=False):
     state, config, template = map(read_json, (state_path, config_path, template_path))
     hashes = {'config_sha256', 'binary_sha256', 'unit_sha256', 'license_sha256'}
@@ -72,6 +114,8 @@ def validate_state(state_path, config_path, template_path, derive=False):
     expected['settings']['clients'][0]['id'] = client['id']
     for key in ('privateKey', 'serverNames', 'shortIds', 'target'):
         expected['streamSettings']['realitySettings'][key] = reality[key]
+    if config.get('outbounds', [{}])[0].get('tag') == 'warp':
+        warp_xray(template, True)
     # JSON comparison also distinguishes false/0 and 0/0.0, unlike Python equality.
     if json.dumps(config, sort_keys=True) != json.dumps(template, sort_keys=True):
         raise ValueError('unsupported configuration')
@@ -118,7 +162,15 @@ def listener(lines, listen, port, pid, family=None):
 
 
 def main():
-    if sys.argv[1] == 'rename-directory':
+    if sys.argv[1] in ('warp-xray', 'warp-hysteria'):
+        operation, mode, path = sys.argv[1:4]
+        if mode not in ('enabled', 'disabled'):
+            raise ValueError('mode')
+        if operation == 'warp-xray':
+            print(json.dumps(warp_xray(read_json(path), mode == 'enabled'), indent=2))
+        else:
+            print(warp_hysteria(Path(path).read_text(), mode == 'enabled'), end='')
+    elif sys.argv[1] == 'rename-directory':
         source, destination = map(Path, sys.argv[2:4])
         # Sibling staging only. os.rename raises EXDEV; it never copies a tree.
         if (source.parent != destination.parent or source.is_symlink()

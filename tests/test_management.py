@@ -41,6 +41,13 @@ class ManagementTests(unittest.TestCase):
     def test_valid_identity(self):
         self.validate()
 
+    def test_warp_preserves_identity_validation(self):
+        management.warp_xray(self.config, True)
+        self.validate()
+        self.config['outbounds'].append({'tag': 'direct', 'protocol': 'freedom'})
+        with self.assertRaises(ValueError):
+            self.validate()
+
     def test_port_443_identity(self):
         self.config['inbounds'][0]['port'] = 443
         self.validate()

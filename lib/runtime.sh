@@ -10,7 +10,7 @@ runtime_files() {
         tools/release.py trust/release-ed25519.pub lib/argo.sh lib/argo_runtime.py \
         lib/argo_ws.sh lib/argo_xhttp.sh lib/argo_provision.py templates/vless-ws.json templates/vless-xhttp.json \
         templates/nodeforge-argo.service templates/nodeforge-argo-xray.service \
-        lib/subscription.sh lib/subscription.py templates/nodeforge-subscription.service
+        lib/subscription.sh lib/subscription.py templates/nodeforge-subscription.service lib/warp.sh
 }
 runtime_paths() {
     NF_APP=$NF_BIN_DIR/app

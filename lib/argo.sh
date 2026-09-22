@@ -81,6 +81,7 @@ PY
     jq --arg uuid "$uuid" --argjson port "$port" \
         '.inbounds[0].port=$port | .inbounds[0].settings.clients[0].id=$uuid' \
         "$(argo_profile_template)" > "$NF_WORK/argo-xray.json"
+    warp_generate_xray "$NF_WORK/argo-xray.json"
     test_xray_config "$NF_BIN" "$NF_WORK/argo-xray.json"
 }
 

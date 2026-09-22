@@ -55,6 +55,16 @@ VPS 的云安全组和主机防火墙需要允许输出的 TCP 端口。NodeForg
 
 ## 参数覆盖
 
+源码 `v0.6.0-dev` 新增 WARP 出站（默认关闭，两个 Profile 通用）：
+
+```bash
+sudo nodeforge warp enable
+sudo nodeforge warp status
+sudo nodeforge warp disable
+```
+
+`enable` 按 [Cloudflare 官方 APT 方式](https://pkg.cloudflareclient.com/)安装缺失的 WARP 客户端，无注册时创建 consumer Free 注册并接受官方条款；使用 MASQUE Local Proxy `127.0.0.1:40000`。Reality、Argo 和 HY2 的 TCP 出站改走 SOCKS5，UDP 转发被阻断，代理不可用时不回退 direct。HY2 自身的 QUIC 入站仍正常。`disable` 恢复 VPS direct 出站并断开 WARP。选择保存在 `/var/lib/nodeforge/warp.json`（缺失即 OFF），配置和 WARP 连接选择跨重启保留；cloudflared、SSH 和系统默认路由不改动。状态命令实时查询出口 IP，查询失败显示 `unavailable`。现有身份、分享链接和订阅 URL 不变。
+
 安装后的常用管理操作见下文「本地管理命令」。这里的环境变量仅用于现有本地 installer，不是 CLI 的参数覆盖接口。
 
 明确设置的环境变量优先于已有配置；没有覆盖时沿用已有身份；仅首次安装使用默认值或随机生成。
