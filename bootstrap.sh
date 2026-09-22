@@ -232,7 +232,7 @@ def main():
 if __name__ == '__main__':
     sys.exit(main())
 NODEFORGE_VERIFIER
-    local version='v0.5.1' asset base source file
+    local version='v0.6.0' asset base source file
     base="https://github.com/shenzhenshes248-hash/NodeForge/releases/download/$version"
     for asset in manifest.json manifest.sig "nodeforge-$version.tar.gz"; do
         curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
@@ -243,7 +243,7 @@ NODEFORGE_VERIFIER
         --manifest "$NF_BOOT_TMP/manifest.json" --signature "$NF_BOOT_TMP/manifest.sig" \
         --destination "$NF_BOOT_TMP/extracted"
     source="$NF_BOOT_TMP/extracted/nodeforge-$version"
-    for file in VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service templates/nodeforge-hysteria.service lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh lib/hysteria.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py tools/release.py trust/release-ed25519.pub lib/argo.sh lib/argo_runtime.py lib/argo_ws.sh lib/argo_xhttp.sh lib/argo_provision.py templates/vless-ws.json templates/vless-xhttp.json templates/nodeforge-argo.service templates/nodeforge-argo-xray.service lib/subscription.sh lib/subscription.py templates/nodeforge-subscription.service install.sh uninstall.sh LICENSE README.md docs/M2_PHASE3.md; do
+    for file in VERSION nodeforge.sh templates/vless-reality.json templates/nodeforge-xray.service templates/nodeforge-hysteria.service lib/common.sh lib/defaults.sh lib/version.sh lib/state.sh lib/system.sh lib/xray.sh lib/hysteria.sh lib/reality.sh lib/config.sh lib/service.sh lib/transaction.sh lib/share.sh lib/runtime.sh lib/update.sh lib/update.py lib/cli.sh lib/network.py lib/management.py tools/release.py trust/release-ed25519.pub lib/argo.sh lib/argo_runtime.py lib/argo_ws.sh lib/argo_xhttp.sh lib/argo_provision.py templates/vless-ws.json templates/vless-xhttp.json templates/nodeforge-argo.service templates/nodeforge-argo-xray.service lib/subscription.sh lib/subscription.py templates/nodeforge-subscription.service lib/warp.sh install.sh uninstall.sh LICENSE README.md docs/M2_PHASE3.md; do
         [[ -f $source/$file && ! -L $source/$file ]] || {
             printf 'Incomplete release bundle\n' >&2; return 1;
         }
