@@ -82,6 +82,16 @@ warp_status() {
     original=$(curl --noproxy '*' -4 -fsS --connect-timeout 3 --max-time 8 https://api.ipify.org 2>/dev/null) || original=unavailable
     printf 'WARP: %s\nConnection: %s\nLocal Proxy: socks5h://127.0.0.1:40000\nVPS IP: %s\nWARP IP: %s\n' \
         "$NF_WARP_MODE" "$connection" "$original" "$exit_ip"
+    if [[ $NF_WARP_MODE == enabled ]]; then
+        printf 'Reality: WARP\nArgo: WARP\n'
+    else
+        printf 'Reality: direct\nArgo: direct\n'
+    fi
+    if grep -q '^# NodeForge WARP outbound$' "$NF_HYSTERIA_CONFIG" 2>/dev/null; then
+        printf 'HY2: legacy WARP; run nodeforge warp enable/disable to restore direct\n'
+    else
+        printf 'HY2: direct (VPS, TCP/UDP)\n'
+    fi
 }
 
 warp_cleanup() {
@@ -102,13 +112,13 @@ warp_cleanup() {
 }
 
 warp_switch() (
-    local desired=$1 i
+    local desired=$1 i hy_changed=0
     cli_load_state
     warp_load
     local NF_WARP_PREVIOUS=$NF_WARP_MODE NF_WARP_CHANGING=0
     argo_paths
-    local -a warp_files=("$NF_CONFIG" "$NF_STATE" "$NF_HYSTERIA_CONFIG" "$NF_HYSTERIA_STATE")
-    local -a warp_services=("$NF_SERVICE" "$NF_HYSTERIA_SERVICE")
+    local -a warp_files=("$NF_CONFIG" "$NF_STATE")
+    local -a warp_services=("$NF_SERVICE")
     if [[ -d $NF_ARGO_DIR ]]; then
         load_argo
         warp_files+=("$NF_ARGO_DIR/xray.json" "$NF_ARGO_DIR/state.json")
@@ -118,12 +128,19 @@ warp_switch() (
     trap warp_cleanup EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+    # Restore the v0.6.0 HY2 proxy policy once, including repeated enable.
+    # Normal WARP toggles neither rewrite nor restart an already-direct HY2.
+    if grep -q '^# NodeForge WARP outbound$' "$NF_HYSTERIA_CONFIG"; then
+        python3 "$NF_SOURCE/lib/management.py" warp-hysteria disabled "$NF_HYSTERIA_CONFIG" > "$NF_WORK/warp-hysteria.yaml"
+        hy_changed=1
+        warp_files+=("$NF_HYSTERIA_CONFIG" "$NF_HYSTERIA_STATE")
+        warp_services+=("$NF_HYSTERIA_SERVICE")
+    fi
     if [[ $desired == enabled ]]; then warp_connect; fi
-    if [[ $desired != "$NF_WARP_MODE" ]]; then
+    if [[ $desired != "$NF_WARP_MODE" || $hy_changed == 1 ]]; then
         mkdir "$NF_WORK/warp-backup"
         for i in "${!warp_files[@]}"; do cp -p -- "${warp_files[$i]}" "$NF_WORK/warp-backup/$i"; done
         python3 "$NF_SOURCE/lib/management.py" warp-xray "$desired" "$NF_CONFIG" > "$NF_WORK/warp-xray.json"
-        python3 "$NF_SOURCE/lib/management.py" warp-hysteria "$desired" "$NF_HYSTERIA_CONFIG" > "$NF_WORK/warp-hysteria.yaml"
         test_xray_config "$NF_BIN" "$NF_WORK/warp-xray.json"
         if [[ -d $NF_ARGO_DIR ]]; then
             python3 "$NF_SOURCE/lib/management.py" warp-xray "$desired" "$NF_ARGO_DIR/xray.json" > "$NF_WORK/warp-argo.json"
@@ -132,9 +149,11 @@ warp_switch() (
         NF_WARP_CHANGING=1
         systemctl stop "${warp_services[@]}"
         atomic_install "$NF_WORK/warp-xray.json" "$NF_CONFIG" 600 nodeforge nodeforge
-        atomic_install "$NF_WORK/warp-hysteria.yaml" "$NF_HYSTERIA_CONFIG" 600 root root
         write_state
-        write_hysteria_state
+        if [[ $hy_changed == 1 ]]; then
+            atomic_install "$NF_WORK/warp-hysteria.yaml" "$NF_HYSTERIA_CONFIG" 600 root root
+            write_hysteria_state
+        fi
         if [[ -d $NF_ARGO_DIR ]]; then
             atomic_install "$NF_WORK/warp-argo.json" "$NF_ARGO_DIR/xray.json" 640 root nodeforge
             jq --arg hash "$(sha256_file "$NF_ARGO_DIR/xray.json")" '.files["xray.json"]=$hash' \

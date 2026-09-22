@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'lib'))
-from management import warp_xray, warp_hysteria  # noqa: E402
+from management import WARP_HYSTERIA, warp_xray, warp_hysteria  # noqa: E402
 
 
 class WarpTests(unittest.TestCase):
@@ -25,14 +25,16 @@ class WarpTests(unittest.TestCase):
                 self.assertEqual(restored, original)
                 self.assertEqual(warp_xray(restored, False), original)
 
-    def test_hysteria_only_proxy_and_no_udp(self):
+    def test_hysteria_always_direct_with_udp(self):
         original = 'listen: :443,20000-50000\nauth:\n  type: password\n  password: existing\n'
         enabled = warp_hysteria(original, True)
-        self.assertIn('disableUDP: true\n', enabled)
-        self.assertIn('type: socks5\n', enabled)
-        self.assertNotIn('type: direct', enabled)
+        self.assertEqual(enabled, original)
+        self.assertNotIn('disableUDP:', enabled)
+        self.assertNotIn('outbounds:', enabled)
         self.assertEqual(warp_hysteria(enabled, True), enabled)
         self.assertEqual(warp_hysteria(enabled, False), original)
+        for mode in (True, False):
+            self.assertEqual(warp_hysteria(original + WARP_HYSTERIA, mode), original)
 
     def test_refuse_unmanaged_bypass_policy(self):
         config = json.loads((ROOT / 'templates/vless-reality.json').read_text())

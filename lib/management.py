@@ -67,13 +67,15 @@ WARP_HYSTERIA = ('# NodeForge WARP outbound\n'
 
 
 def warp_hysteria(text, enabled):
+    # Both switch directions keep HY2 direct. The old suffix is recognized
+    # only to restore configurations installed by v0.6.0, never emitted again.
     if text.endswith(WARP_HYSTERIA):
         text = text[:-len(WARP_HYSTERIA)]
     # The managed base has only listen, tls and auth. Never silently keep an ACL
     # or a second outbound that could bypass the selected egress.
     if re.search(r'^(?:outbounds|acl|disableUDP):', text, re.MULTILINE):
         raise ValueError('unsupported Hysteria outbound policy')
-    return text + WARP_HYSTERIA if enabled else text
+    return text
 
 
 def validate_state(state_path, config_path, template_path, derive=False):
@@ -169,7 +171,7 @@ def main():
         if operation == 'warp-xray':
             print(json.dumps(warp_xray(read_json(path), mode == 'enabled'), indent=2))
         else:
-            print(warp_hysteria(Path(path).read_text(), mode == 'enabled'), end='')
+            sys.stdout.buffer.write(warp_hysteria(Path(path).read_text(), mode == 'enabled').encode())
     elif sys.argv[1] == 'rename-directory':
         source, destination = map(Path, sys.argv[2:4])
         # Sibling staging only. os.rename raises EXDEV; it never copies a tree.

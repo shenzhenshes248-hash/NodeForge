@@ -55,7 +55,7 @@ VPS 的云安全组和主机防火墙需要允许输出的 TCP 端口。NodeForg
 
 ## 参数覆盖
 
-`v0.6.0` 新增 WARP 出站（默认关闭，两个 Profile 通用）：
+当前开发版 `v0.6.1-dev` 的 WARP 出站仅作用于 Reality 和 Argo（默认关闭，两个 Profile 通用）：
 
 默认安装不安装 `cloudflare-warp`、不注册或连接 WARP。仅显式执行 `nodeforge warp enable`，或安装时传入 `--warp`，才按需安装并启用；例如 `sudo bash install.sh --profile xhttp --warp`，将在节点安装完成后启用 WARP。
 
@@ -65,7 +65,7 @@ sudo nodeforge warp status
 sudo nodeforge warp disable
 ```
 
-`enable` 按 [Cloudflare 官方 APT 方式](https://pkg.cloudflareclient.com/)安装缺失的 WARP 客户端，无注册时创建 consumer Free 注册并接受官方条款；使用 MASQUE Local Proxy `127.0.0.1:40000`。Reality、Argo 和 HY2 的 TCP 出站改走 SOCKS5，UDP 转发被阻断，代理不可用时不回退 direct。HY2 自身的 QUIC 入站仍正常。`disable` 恢复 VPS direct 出站并断开 WARP。选择保存在 `/var/lib/nodeforge/warp.json`（缺失即 OFF），配置和 WARP 连接选择跨重启保留；cloudflared、SSH 和系统默认路由不改动。状态命令实时查询出口 IP，查询失败显示 `unavailable`。现有身份、分享链接和订阅 URL 不变。
+`enable` 按 [Cloudflare 官方 APT 方式](https://pkg.cloudflareclient.com/)安装缺失的 WARP 客户端，无注册时创建 consumer Free 注册并接受官方条款；使用 MASQUE Local Proxy `127.0.0.1:40000`。Reality、Argo 的 TCP 出站改走 SOCKS5，其 UDP 转发继续阻断，代理不可用时不回退 direct。HY2 始终使用 VPS direct 出口，保留 TCP/UDP 转发，出口 IP 仍是 VPS IP。`disable` 仅恢复 Reality、Argo 的 direct 出站并断开 WARP，正常的 HY2 配置和进程不变。旧 v0.6.0 已启用 WARP 的 HY2 配置，在下次执行 enable/disable 时一次性恢复 direct。选择保存在 `/var/lib/nodeforge/warp.json`（缺失即 OFF），配置和 WARP 连接选择跨重启保留；cloudflared、SSH 和系统默认路由不改动。状态命令实时查询出口 IP，查询失败显示 `unavailable`。现有身份、分享链接和订阅 URL 不变。
 
 安装后的常用管理操作见下文「本地管理命令」。这里的环境变量仅用于现有本地 installer，不是 CLI 的参数覆盖接口。
 
