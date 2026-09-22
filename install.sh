@@ -10,13 +10,14 @@ NF_SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$NF_SOURCE/lib/common.sh"
 load_modules
 main() {
-    local dry_run=0 argo_only=0 subscription_only=0
+    local dry_run=0 argo_only=0 subscription_only=0 enable_warp=0
     NF_REQUESTED_PROFILE='' NF_ARGO_DOMAIN='' NF_ARGO_CREDENTIALS=''
     while (( $# )); do
         case $1 in
             --dry-run) dry_run=1; shift ;;
             --argo) argo_only=1; shift ;;
             --subscription) subscription_only=1; shift ;;
+            --warp) enable_warp=1; shift ;;
             --profile)
                 (( $# >= 2 )) || die 'Missing --profile value'
                 case $2 in ws|xhttp) NF_REQUESTED_PROFILE=$2 ;; *) die 'Profile must be ws or xhttp' ;; esac
@@ -25,7 +26,7 @@ main() {
                 (( $# >= 2 )) || die "Missing $1 value"
                 if [[ $1 == --argo-domain ]]; then NF_ARGO_DOMAIN=$2; else NF_ARGO_CREDENTIALS=$2; fi
                 shift 2 ;;
-            *) die 'Usage: bash install.sh [--dry-run|--argo|--subscription] [--profile ws|xhttp] [--argo-domain HOST --argo-credentials FILE]' ;;
+            *) die 'Usage: bash install.sh [--dry-run|--argo|--subscription] [--profile ws|xhttp] [--warp] [--argo-domain HOST --argo-credentials FILE]' ;;
         esac
     done
     (( ! argo_only || ! subscription_only )) || die '--argo and --subscription cannot be combined'
@@ -34,6 +35,7 @@ main() {
         argo_select_profile
         info "Preflight passed: $NF_OS $NF_OS_VERSION / $NF_ARCH"
         info "Would install Reality, HY2 and Argo profile $NF_PROFILE."
+        if (( enable_warp )); then info 'Would enable WARP after installation.'; fi
         return
     fi
     acquire_lock
@@ -48,5 +50,6 @@ main() {
     if (( ! argo_only && ! subscription_only )); then install_nodeforge; fi
     if (( ! subscription_only )); then install_argo; fi
     install_subscription
+    if (( enable_warp )); then warp_switch enabled; fi
 }
 main "$@"

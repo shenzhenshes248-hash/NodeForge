@@ -57,6 +57,8 @@ VPS 的云安全组和主机防火墙需要允许输出的 TCP 端口。NodeForg
 
 源码 `v0.6.0-dev` 新增 WARP 出站（默认关闭，两个 Profile 通用）：
 
+默认安装不安装 `cloudflare-warp`、不注册或连接 WARP。仅显式执行 `nodeforge warp enable`，或安装时传入 `--warp`，才按需安装并启用；例如 `sudo bash install.sh --profile xhttp --warp`，将在节点安装完成后启用 WARP。
+
 ```bash
 sudo nodeforge warp enable
 sudo nodeforge warp status
