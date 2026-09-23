@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前源码提供两个安装 Profile：`ws`（Reality + HY2 + Argo WS / Quick Tunnel）和 `xhttp`（Reality + HY2 + Argo XHTTP / Named Tunnel）。每台 VPS 只运行其中一种 Argo，共三个节点；Reality/HY2、CLI、更新、签名与稳定订阅共用一套代码。
 
-**当前正式版本 `v0.6.0`。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
+**当前正式版本 `v0.6.1`。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
 
 ## 平台
 
@@ -19,11 +19,36 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 ## 安装
 
-Debian 12 amd64 官方一行安装：
+Debian 12 amd64 常用一行安装，按需选择一种：
+
+**1. 默认 WS**（Reality + HY2 + Argo WS / Quick Tunnel）：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shenzhenshes248-hash/NodeForge/master/bootstrap.sh | sudo bash
 ```
+
+**2. XHTTP**（Reality + HY2 + Argo XHTTP / Named Tunnel）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shenzhenshes248-hash/NodeForge/master/bootstrap.sh | sudo bash -s -- --profile xhttp
+```
+
+**3. WS + WARP**：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shenzhenshes248-hash/NodeForge/master/bootstrap.sh | sudo bash -s -- --warp
+```
+
+**4. XHTTP + WARP**：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shenzhenshes248-hash/NodeForge/master/bootstrap.sh | sudo bash -s -- --profile xhttp --warp
+```
+
+WARP 不是第三个 Profile，只是两个 Profile 共用的可选出口层。默认不安装、不注册、不启用 WARP。
+
+- **WARP ON**：Reality + Argo → WARP；HY2 → VPS direct，保留 TCP/UDP 转发。
+- **WARP OFF**：三个节点全部使用 VPS direct。
 
 也可获取并审阅本仓库的可信副本，在仓库根目录运行：
 
@@ -55,7 +80,7 @@ VPS 的云安全组和主机防火墙需要允许输出的 TCP 端口。NodeForg
 
 ## 参数覆盖
 
-当前开发版 `v0.6.1-dev` 的 WARP 出站仅作用于 Reality 和 Argo（默认关闭，两个 Profile 通用）：
+WARP 出站仅作用于 Reality 和 Argo（默认关闭，两个 Profile 通用）：
 
 默认安装不安装 `cloudflare-warp`、不注册或连接 WARP。仅显式执行 `nodeforge warp enable`，或安装时传入 `--warp`，才按需安装并启用；例如 `sudo bash install.sh --profile xhttp --warp`，将在节点安装完成后启用 WARP。
 
