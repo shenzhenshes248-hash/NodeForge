@@ -13,7 +13,7 @@ NF_BIN=$root/xray
 NF_HYSTERIA_BIN=$root/hysteria
 NF_UNIT=$root/unit
 mkdir -p "$root/argo" "$root/subscription"
-touch "$root/subscription/sub.txt"
+
 cat > "$NF_BIN" <<'BIN'
 #!/usr/bin/env bash
 printf 'Xray 26.9.9\n'
@@ -38,7 +38,13 @@ argo_current_domain() { [[ ! -e $root/fail-hostname ]] && printf '%s\n' "$fixtur
 timeout() { shift; "$@"; }
 systemctl() { [[ $1 == is-active ]]; }
 warp_load() { NF_WARP_MODE=$mode; }
-warp_cli() { printf 'Status update: %s\n' "$connected"; }
+warp_cli() {
+    printf 'Status update: %s\r\n' "$connected"
+    # A second write after the status line reproduces the original pipe race.
+    sleep 0.02
+    printf 'Network: healthy\n'
+}
+diagnostic_subscription() { [[ ! -e $root/fail-subscription ]]; }
 warp-cli() { :; }
 printf 'listen: :443\n' > "$NF_HYSTERIA_CONFIG"
 fixture_profile=ws fixture_domain=fixture.trycloudflare.com mode=disabled connected=Disconnected
@@ -52,6 +58,9 @@ cmp "$root/help" "$root/help2"
 cli_main status > "$root/status"
 grep -q '^Profile: ws$' "$root/status"
 grep -q '^Reality: running$' "$root/status"
+grep -q '^WARP: disabled$' "$root/status"
+grep -q '^Connection: Disconnected$' "$root/status"
+grep -q '^Subscription: OK$' "$root/status"
 cli_main doctor > "$root/doctor"
 grep -q '^Healthy$' "$root/doctor"
 grep -q '^Tunnel hostname: fixture.trycloudflare.com$' "$root/doctor"
@@ -71,6 +80,7 @@ cli_main status > "$root/status"
 grep -q '^Argo XHTTP: running$' "$root/status"
 cat "$root/status"
 cat "$root/doctor"
+grep -q '^Connection: Disconnected$' "$root/doctor"
 mode=enabled connected=Connected
 python3 - "$NF_SOURCE/lib" "$NF_CONFIG" "$root/argo/xray.json" <<'PY'
 import json, sys
@@ -87,6 +97,9 @@ grep -q '^Reality egress: WARP$' "$root/doctor"
 grep -q '^Argo egress: WARP$' "$root/doctor"
 grep -q '^HY2 egress: direct$' "$root/doctor"
 grep -q '^Healthy$' "$root/doctor"
+cli_main status > "$root/status"
+grep -q '^WARP: enabled$' "$root/status"
+grep -q '^Connection: Connected$' "$root/status"
 connected=Disconnected
 if cli_main doctor > "$root/failure"; then exit 1; fi
 grep -q '^WARP: FAILED$' "$root/failure"
@@ -101,7 +114,7 @@ touch "$root/fail-hostname"
 if cli_main doctor > "$root/failure"; then exit 1; fi
 grep -q '^Reason: tunnel hostname unavailable$' "$root/failure"
 rm "$root/fail-hostname"
-rm "$root/subscription/sub.txt"
+touch "$root/fail-subscription"
 cli_main doctor > "$root/warning"
 grep -q '^Warning$' "$root/warning"
 printf 'PASS M7: ws/xhttp, WARP OFF/ON/disconnected, service failure, hostname failure, subscription warning, status/help\n'

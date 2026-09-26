@@ -45,6 +45,47 @@ except (OSError, ValueError, KeyError, IndexError, TypeError, AssertionError):
 PY
 }
 
+diagnostic_warp_connection() {
+    local output state=Disconnected attempt
+    command -v warp-cli >/dev/null || { printf '%s\n' "$state"; return; }
+    for attempt in 1 2; do
+        # Consume the complete output before parsing: grep -q on a live pipe
+        # can close it early and turn a Connected response into a pipefail error.
+        if output=$(warp_cli status 2>/dev/null); then
+            state=$(awk '$1 == "Status" && $2 == "update:" {
+                gsub(/\r/, "", $3); if ($3 == "Connected" || $3 == "Disconnected") print $3
+            }' <<< "$output")
+            [[ $state != Connected ]] || break
+        fi
+        [[ $1 == enabled && $attempt == 1 ]] || break
+        sleep 0.2
+    done
+    printf '%s\n' "${state:-Disconnected}"
+}
+
+diagnostic_subscription() {
+    (load_subscription) >/dev/null 2>&1 || return 1
+    timeout 3 systemctl is-active --quiet "$NF_SUB_SERVICE" >/dev/null 2>&1 || return 1
+    # Probe the existing token endpoint on loopback; never print its URL/body.
+    python3 - "$NF_SOURCE/lib" "$NF_SUB_CONFIG" <<'PY'
+import sys
+from urllib.request import ProxyHandler, build_opener
+sys.path.insert(0, sys.argv[1])
+from subscription import read_config
+try:
+    config = read_config(sys.argv[2])
+    host = '[::1]' if config['bind'] == '::' else '127.0.0.1'
+    url = f"http://{host}:{config['port']}/{config['token']}/sub.txt"
+    with build_opener(ProxyHandler({})).open(url, timeout=10) as response:
+        lines = response.read(65536).decode().splitlines()
+        assert response.status == 200 and len(lines) == 3
+        assert all(line.startswith(prefix) for line, prefix in zip(
+            lines, ('vless://', 'hysteria2://', 'vless://')))
+except Exception:
+    sys.exit(1)
+PY
+}
+
 diagnostic_issue() {
     local severity=$1 label=$2 reason=$3 command=$4
     if [[ $severity == FAILED ]]; then result=Failed
@@ -56,7 +97,7 @@ diagnostic_issue() {
 
 cli_diagnostics() (
     local detail=$1 result=Healthy profile=unknown reality=failed hy2=failed argo=failed
-    local domain='' warp=unknown connection=Disconnected subscription=missing re he ae
+    local domain='' warp=unknown connection=Disconnected subscription=unavailable re he ae
     argo_paths
     subscription_paths
     # Existing loaders exit on corrupt state; isolate their validation first.
@@ -76,8 +117,8 @@ cli_diagnostics() (
         domain=$(argo_current_domain 2>/dev/null) || domain=''
     fi
     warp=$( (warp_load; printf '%s' "$NF_WARP_MODE") 2>/dev/null) || warp=unknown
-    if command -v warp-cli >/dev/null && warp_cli status 2>/dev/null | grep -q '^Status update: Connected$'; then connection=Connected; fi
-    [[ ! -f $NF_SUB_DIR/sub.txt ]] || subscription=OK
+    connection=$(diagnostic_warp_connection "$warp")
+    if diagnostic_subscription; then subscription=OK; fi
     re=$(diagnostic_egress xray "$NF_CONFIG")
     ae=$(diagnostic_egress xray "$NF_ARGO_DIR/xray.json")
     he=$(diagnostic_egress hy2 "$NF_HYSTERIA_CONFIG")
@@ -105,7 +146,7 @@ cli_diagnostics() (
     else diagnostic_issue FAILED Argo 'tunnel hostname unavailable' 'nodeforge restart'; fi
     else diagnostic_issue WARNING Argo 'not installed' 'nodeforge info'; fi
     printf 'Reality egress: %s\nArgo egress: %s\nHY2 egress: %s\n\nWARP: %s\n' "$re" "$ae" "$he" "$warp"
-    [[ $detail != doctor ]] || printf 'Connection: %s\n' "$connection"
+    printf 'Connection: %s\n' "$connection"
     if [[ $warp == unknown || $re == unknown || $ae == unknown || $he == unknown ]]; then
         diagnostic_issue WARNING Egress 'state or outbound policy unavailable' 'nodeforge info'
     elif [[ $warp == enabled && ( $re != WARP || $ae != WARP ) || $warp == disabled && ( $re != direct || $ae != direct ) || $he != direct ]]; then
@@ -115,7 +156,7 @@ cli_diagnostics() (
         diagnostic_issue FAILED WARP 'Local Proxy is not Connected' 'nodeforge warp status'
     fi
     printf 'Subscription: %s\n' "$subscription"
-    [[ $subscription == OK ]] || diagnostic_issue WARNING Subscription 'subscription/sub.txt missing' 'nodeforge link'
+    [[ $subscription == OK ]] || diagnostic_issue WARNING Subscription 'subscription service, config or endpoint unavailable' 'nodeforge link'
     if [[ $detail == doctor ]]; then
         local xv hv cv
         xv=$(timeout 3 "$NF_BIN" version 2>/dev/null | awk 'NR == 1 && $1 == "Xray" {print $2}') || xv=''
