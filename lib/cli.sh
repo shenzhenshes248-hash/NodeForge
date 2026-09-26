@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 cli_help() {
-    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  info\n  link\n  argo-edge <address|"">\n  warp <enable|disable|status>\n  restart\n  uninstall\n  update\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
+    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  doctor\n  info\n  link\n  argo-edge <address|"">\n  warp <enable|disable|status>\n  restart\n  uninstall\n  update\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
 }
 cli_require_root() { (( EUID == 0 )) || die 'NodeForge: this command must be run as root'; }
 cli_load_state() {
@@ -17,13 +17,8 @@ cli_load_state() {
     cmp -s "$NF_UNIT" "$NF_SOURCE/templates/nodeforge-xray.service" || die 'Unsupported managed service unit'
     cmp -s "$NF_HYSTERIA_UNIT" "$NF_SOURCE/templates/nodeforge-hysteria.service" || die 'Unsupported managed Hysteria service unit'
 }
-cli_status() {
-    cli_load_state
-    if ! managed_service_healthy; then die 'Status: unhealthy (service or owned listener validation failed)'; fi
-    if ! managed_hysteria_healthy; then die 'Status: unhealthy (Hysteria service or owned listener validation failed)'; fi
-    printf 'NodeForge: installed\nState schema: 1\nXray service: active\nHysteria service: active\nTCP listener: active\nUDP listener: active\nStatus: healthy\n'
-    argo_status
-}
+cli_status() { cli_diagnostics status; }
+cli_doctor() { cli_diagnostics doctor; }
 cli_info() {
     cli_load_state
     printf 'NodeForge version: %s\nState schema: 1\nXray version: %s\nXray service: %s\nReality protocol: VLESS + TCP/RAW + REALITY + XTLS Vision\nReality listen: %s\nReality port: %s\nHysteria version: %s\nHysteria service: %s\nHysteria UDP port: %s\nHysteria port hopping: %s\nHysteria client hop interval: %ss (v2rayN default)\nReality config: %s\nHysteria config: %s\nState: %s\nXray binary: %s\nHysteria binary: %s\n' \
@@ -89,18 +84,18 @@ cli_main() {
     case ${1:-} in
         ''|help|--help) cli_help; return ;;
         version) printf 'NodeForge %s\n' "$NF_NODEFORGE_VERSION"; return ;;
-        status|info|link|subscription-content|restart|uninstall|update|xray-update) ;;
+        status|doctor|info|link|subscription-content|restart|uninstall|update|xray-update) ;;
         *) die 'Unknown command; use nodeforge --help' ;;
     esac
     cli_require_root
     local command=$1
     case $command in
-        status|info|link|subscription-content) acquire_lock shared ;;
+        status|doctor|info|link|subscription-content) acquire_lock shared ;;
         restart|uninstall|update|xray-update) acquire_lock ;;
     esac
     # Literal dispatch only; no state-controlled targets, paths, or function names.
     case $command in
-        status) cli_status ;; info) cli_info ;; link) cli_link ;;
+        status) cli_status ;; doctor) cli_doctor ;; info) cli_info ;; link) cli_link ;;
         subscription-content) subscription_content ;;
         restart) cli_restart ;; uninstall) cli_uninstall ;; update) cli_update ;;
         xray-update) cli_xray_update ;;

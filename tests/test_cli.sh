@@ -17,7 +17,7 @@ assert_eq "NodeForge $(cat "$NF_SOURCE/VERSION")" "$(cli_main version)"
 assert_fails cli_main unknown
 assert_fails cli_main status extra
 cli_main status > "$NF_WORK/status"
-grep -q '^Status: healthy$' "$NF_WORK/status"
+grep -q '^Warning$' "$NF_WORK/status"
 cli_main info > "$NF_WORK/info"
 grep -q '^Xray version: v26.9.9$' "$NF_WORK/info"
 cli_main link > "$NF_WORK/link"
@@ -41,7 +41,7 @@ rm "$NF_TEST_ROOT/nonroot"
 for failure in missing-service wrong-unit missing-listener wrong-pid wrong-exe wrong-address zero-pid dropin stale-unit; do
     touch "$NF_TEST_ROOT/$failure"
     assert_fails cli_main status
-    assert_not_contains 'Status: healthy' "$NF_WORK/expected-failure.log"
+    assert_not_contains 'Healthy' "$NF_WORK/expected-failure.log"
     rm "$NF_TEST_ROOT/$failure"
 done
 rm "$NF_TEST_ROOT/active"
