@@ -4,7 +4,28 @@
 set -Eeuo pipefail
 source "${NF_SOURCE:?}/tests/helpers/setup.sh"
 source "$NF_SOURCE/tests/helpers/cli_mocks.sh"
+eval "$(declare -f test_xray_config | sed '1s/test_xray_config/fixture_test_xray_config/')"
+test_xray_config() {
+    [[ $2 == *.json ]] || die 'Xray requires a recognizable config format'
+    fixture_test_xray_config "$@"
+}
 install_nodeforge > "$NF_WORK/install.stdout"
+
+# Production installs own Reality config as nodeforge:nodeforge, unlike the
+# unprivileged filesystem fixture. Exercise the actual ownership predicate.
+(
+    source "$NF_SOURCE/lib/runtime.sh"
+    trusted_directory() { [[ -d $1 && ! -L $1 ]]; }
+    stat() {
+        case $2 in
+            %u) if [[ $3 == "$NF_CONFIG" ]]; then printf '999\n'; else printf '0\n'; fi ;;
+            %a) printf '600\n' ;;
+            *) command stat "$@" ;;
+        esac
+    }
+    maintenance_paths
+    maintenance_check_paths
+)
 
 # Journal mapping is isolated from host systemd/journald.
 (

@@ -163,11 +163,19 @@ maintenance_paths() {
 }
 
 maintenance_check_paths() {
-    local path parent
+    local path parent mode
     for path in "${maintenance_files[@]}"; do
         parent=$(dirname "$path")
         if [[ -e $parent || -L $parent ]]; then trusted_directory "$parent"; fi
-        if [[ -e $path || -L $path ]]; then trusted_file "$path"; fi
+        if [[ -e $path || -L $path ]]; then
+            if [[ $path == "$NF_CONFIG" && $(stat -c %u "$path") == "$(id -u nodeforge)" ]]; then
+                # The installer and WARP switch own Reality's config as the
+                # service user. Accept that established ownership, not others.
+                require_regular "$path"
+                mode=$(stat -c %a "$path")
+                (( (8#$mode & 0022) == 0 )) || die 'Reality config is writable by group/others'
+            else trusted_file "$path"; fi
+        fi
     done
 }
 
@@ -198,7 +206,10 @@ maintenance_validate_stage() (
     python3 "$NF_SOURCE/lib/management.py" state "$NF_STATE" "$NF_CONFIG" "$NF_SOURCE/templates/vless-reality.json"
     load_existing
     load_hysteria
-    test_xray_config "$NF_BIN" "$NF_CONFIG"
+    # Xray infers the parser from the filename; archive member labels have no
+    # .json suffix. Test an identical staged copy with the expected extension.
+    cp "$NF_CONFIG" "$stage/xray.json"
+    test_xray_config "$NF_BIN" "$stage/xray.json"
     # Existing ownership loaders validate hashes against the installed binaries.
     if [[ -f $stage/argo-state ]]; then
         [[ -d $argo ]] || die 'Restore requires installed Argo runtime'
@@ -213,7 +224,7 @@ maintenance_validate_stage() (
         # shellcheck disable=SC2329
         argo_paths() { NF_ARGO_DIR=$stage/argo; }
         load_argo
-        test_xray_config "$argo/xray" "$stage/argo-config"
+        test_xray_config "$argo/xray" "$stage/argo/xray.json"
     elif [[ -d $argo ]]; then
         die 'Backup has no Argo state; restore requires matching installed components'
     fi
@@ -303,7 +314,7 @@ cli_restore() (
     trap 'exit 143' TERM
     python3 "$NF_SOURCE/lib/management.py" backup-extract "$1" "$NF_RESTORE/stage"
     maintenance_validate_stage "$NF_RESTORE/stage"
-    local i name mode group
+    local i name mode owner group
     mkdir -m 700 "$NF_RESTORE/old"
     for i in "${!maintenance_names[@]}"; do
         name=${maintenance_names[$i]}
@@ -318,9 +329,9 @@ cli_restore() (
     for i in "${!maintenance_names[@]}"; do
         name=${maintenance_names[$i]}
         if [[ -f $NF_RESTORE/stage/$name ]]; then
-            mode=600 group=root
-            case $name in reality-config|argo-config|argo-tunnel|argo-credentials) mode=640 group=nodeforge ;; hy2-cert) mode=644 ;; esac
-            atomic_install "$NF_RESTORE/stage/$name" "${maintenance_files[$i]}" "$mode" root "$group"
+            mode=600 owner=root group=root
+            case $name in reality-config) owner=nodeforge group=nodeforge ;; argo-config|argo-tunnel|argo-credentials) mode=640 group=nodeforge ;; hy2-cert) mode=644 ;; esac
+            atomic_install "$NF_RESTORE/stage/$name" "${maintenance_files[$i]}" "$mode" "$owner" "$group"
         else rm -f -- "${maintenance_files[$i]}"; fi
     done
     maintenance_warp_apply
