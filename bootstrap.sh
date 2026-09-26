@@ -232,7 +232,7 @@ def main():
 if __name__ == '__main__':
     sys.exit(main())
 NODEFORGE_VERIFIER
-    local version='v0.7.0' asset base source file
+    local version='v0.8.0' asset base source file
     base="https://github.com/shenzhenshes248-hash/NodeForge/releases/download/$version"
     for asset in manifest.json manifest.sig "nodeforge-$version.tar.gz"; do
         curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \

@@ -4,7 +4,7 @@ NodeForge 是一个模块化的代理节点**安装与配置工具**。它不实
 
 当前源码提供两个安装 Profile：`ws`（Reality + HY2 + Argo WS / Quick Tunnel）和 `xhttp`（Reality + HY2 + Argo XHTTP / Named Tunnel）。每台 VPS 只运行其中一种 Argo，共三个节点；Reality/HY2、CLI、更新、签名与稳定订阅共用一套代码。
 
-**当前正式版本 `v0.7.0`。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
+**当前正式版本 `v0.8.0`。** 不指定 profile：新安装默认 `ws`，已有安装沿用原 profile，不自动切换协议。M4 历史验收见 [docs/M4_ACCEPTANCE.md](docs/M4_ACCEPTANCE.md)。
 
 ## 平台
 
@@ -138,7 +138,7 @@ sudo env \
 | `/etc/nodeforge/` | root:nodeforge，0750 |
 | `/etc/nodeforge/xray.json` | 含私钥，nodeforge:nodeforge，0600 |
 | `/var/lib/nodeforge/state.json` | 归属、版本、文件摘要和客户端公钥，root，0600 |
-| `/var/lib/nodeforge/backups/` | 受保护的事务备份，父目录 root，0700 |
+| `/var/lib/nodeforge/backups/` | 事务备份及 `nodeforge backup` 归档，父目录 root，0700 |
 | `/var/lib/nodeforge/pending/` | 未完成事务的持久恢复记录 |
 | `/etc/systemd/system/nodeforge-xray.service` | systemd unit，root，0644 |
 | `/run/lock/nodeforge.lock` | 操作互斥锁；保留空锁文件避免并发锁 inode 竞争 |
@@ -174,7 +174,7 @@ sudo bash uninstall.sh
 
 ## 本地管理命令
 
-本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.7.0`。
+本地 `install.sh` 同时安装 `/usr/local/bin/nodeforge`，无需进入源码目录。NodeForge 版本继续从安装运行时的 `VERSION` 读取，当前为 `v0.8.0`。
 
 | 命令 | 权限 | 实际行为 |
 | --- | --- | --- |
@@ -184,16 +184,22 @@ sudo bash uninstall.sh
 | `sudo nodeforge doctor` | root | 只读诊断：检查服务与监听、Tunnel、WARP、动态订阅及组件版本；问题仅给简短原因和建议命令，不自动修复 |
 | `sudo nodeforge info` | root | 显示版本、固定协议、监听地址/端口、受管路径和服务健康情况；不显示节点凭据 |
 | `sudo nodeforge link` | root | 仅向标准输出写一条当前有效的 VLESS 分享链接；不检查外部客户端连通性 |
+| `sudo nodeforge logs [reality\|hy2\|argo\|warp]` | root | 查看对应服务最近 100 条日志；省略类型查看全部，支持 `-f` 跟随 |
+| `sudo nodeforge backup` | root | 生成带时间戳的配置与身份备份，并打印路径 |
+| `sudo nodeforge restore <backup-file>` | root | 校验备份后 staged restore，保留节点身份、profile 和 WARP 状态 |
+| `sudo nodeforge rollback` | root | 仅回退 NodeForge 程序到上一个成功安装版本，不修改节点配置或身份 |
 | `sudo nodeforge restart` | root | 先校验安装和正式配置，再重启固定的受管 service，并限时验证服务与监听恢复 |
 | `sudo nodeforge update` | root | 签名验证后仅更新 NodeForge runtime/CLI，见 [Phase 5](docs/M2_PHASE5.md) |
 | `sudo nodeforge xray-update` | root | 独立更新官方 Xray（含 pre-release），失败回滚，见 [Xray update](docs/M2_XRAY_UPDATE.md) |
 | `sudo nodeforge uninstall` | root | 复用正式卸载逻辑，清理受管 CLI、Xray、配置和 state，保留未知文件 |
 
-`status/doctor/info/link` 共用 `/run/lock/nodeforge.lock` 的共享锁；install/restart/uninstall/update/xray-update 使用该锁的排他锁。锁冲突明确返回非 0，不自动重试、提权或修复。只读命令不写配置/state、不创建凭据副本、不恢复 pending 事务；发现 pending 时请使用本地 installer 的既有恢复路径。
+`backup` 默认生成到 `/var/lib/nodeforge/backups/`，归档权限为 `600`，只包含纳管配置和运行身份。`restore` 要求已有匹配的运行组件，先在私有 staging 中校验再切换；失败恢复原配置，不重新生成身份。成功 `update` 最多保留一个 previous version；`rollback` 只回退到该上一个成功安装版本，成功后消耗 previous，不提供版本列表或任意版本下载。没有 previous 时返回 `No rollback version available`。
+
+`status/doctor/info/link` 共用 `/run/lock/nodeforge.lock` 的共享锁；install/restart/uninstall/update/xray-update/backup/restore/rollback 使用该锁的排他锁。锁冲突明确返回非 0，不自动重试、提权或修复。只读命令不写配置/state、不创建凭据副本、不恢复 pending 事务；发现 pending 时请使用本地 installer 的既有恢复路径。
 
 所有读取节点状态的 CLI 命令仅支持 schema 1，并核对配置摘要和公私钥关系；损坏、缺字段、未知 schema、身份不一致或非预期服务均拒绝。`status/info` 不输出 UUID、私钥、公钥、shortId 或分享链接；`link` 是显式的凭据输出操作。原有敏感文件权限不放宽，root 以外调用受保护命令会明确失败，不自动 sudo。
 
-本地运行时安装于 `/usr/local/nodeforge/app/releases/<VERSION>/`，入口固定使用这一组模块；重复安装同一份源码保持入口和 runtime 不变。同版本不同内容拒绝原地覆盖，运行时更新使用 `nodeforge update`，不提供多版本切换。卸载先验证固定文件清单及摘要，再逐个删除受管文件；未知内容保留。该清单是本地归属记录，不是签名发行 manifest。
+本地运行时安装于 `/usr/local/nodeforge/app/releases/<VERSION>/`，入口固定使用这一组模块；重复安装同一份源码保持入口和 runtime 不变。同版本不同内容拒绝原地覆盖，运行时更新使用 `nodeforge update`，仅支持上述单个 previous 的回退，不提供任意版本选择。卸载先验证固定文件清单及摘要，再逐个删除受管文件；未知内容保留。该清单是本地归属记录，不是签名发行 manifest。
 
 运行时先复制到 final 同一父目录下的 `.pending-<VERSION>`，校验后使用无 copy fallback 的目录 rename。事务回滚可凭精确的创建记录清理本次不完整产物；正常卸载仍要求完整 inventory。关键恢复失败会返回非零并保留 pending，恢复完成后的证据退役失败也会保留完成标记供重试。没有新增 fsync/断电持久性保证，不能保证任何故障都能自动恢复。
 
