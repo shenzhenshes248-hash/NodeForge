@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 cli_help() {
-    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  doctor\n  info\n  link\n  argo-edge <address|"">\n  warp <enable|disable|status>\n  logs [reality|hy2|argo|warp] [-f]\n  backup\n  restore <backup-file>\n  restart\n  uninstall\n  update\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
+    printf 'NodeForge %s\n\nUsage: nodeforge <command>\n\nCommands:\n  status\n  doctor\n  info\n  link\n  argo-edge <address|"">\n  warp <enable|disable|status>\n  logs [reality|hy2|argo|warp] [-f]\n  backup\n  restore <backup-file>\n  restart\n  uninstall\n  update\n  rollback\n  xray-update\n  version\n' "$NF_NODEFORGE_VERSION"
 }
 cli_require_root() { (( EUID == 0 )) || die 'NodeForge: this command must be run as root'; }
 cli_load_state() {
@@ -110,20 +110,20 @@ cli_main() {
     case ${1:-} in
         ''|help|--help) cli_help; return ;;
         version) printf 'NodeForge %s\n' "$NF_NODEFORGE_VERSION"; return ;;
-        status|doctor|info|link|subscription-content|restart|uninstall|update|xray-update) ;;
+        status|doctor|info|link|subscription-content|restart|uninstall|update|rollback|xray-update) ;;
         *) die 'Unknown command; use nodeforge --help' ;;
     esac
     cli_require_root
     local command=$1
     case $command in
         status|doctor|info|link|subscription-content) acquire_lock shared ;;
-        restart|uninstall|update|xray-update) acquire_lock ;;
+        restart|uninstall|update|rollback|xray-update) acquire_lock ;;
     esac
     # Literal dispatch only; no state-controlled targets, paths, or function names.
     case $command in
         status) cli_status ;; doctor) cli_doctor ;; info) cli_info ;; link) cli_link ;;
         subscription-content) subscription_content ;;
-        restart) cli_restart ;; uninstall) cli_uninstall ;; update) cli_update ;;
+        restart) cli_restart ;; uninstall) cli_uninstall ;; update) cli_update ;; rollback) cli_rollback ;;
         xray-update) cli_xray_update ;;
     esac
 }

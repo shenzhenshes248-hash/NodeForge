@@ -32,18 +32,48 @@ update_check_runtime() (
     cli_require_root
     cli_status >/dev/null
 )
+# This record selects one already-installed runtime, never a download or path.
+update_previous_version() {
+    local record=$NF_APP/previous version
+    if [[ ! -e $record && ! -L $record ]]; then return 0; fi
+    trusted_file "$record"
+    version=$(cat "$record")
+    [[ $version =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-dev)?$ && $version != "$NF_NODEFORGE_VERSION" ]] || die 'Invalid previous version record'
+    printf '%s\n' "$version"
+}
+update_validate_previous() (
+    NF_NODEFORGE_VERSION=$1
+    runtime_paths
+    runtime_validate
+    cmp -s "$NF_RUNTIME/trust/release-ed25519.pub" "$NF_SOURCE/trust/release-ed25519.pub" || die 'Previous runtime trust anchor mismatch'
+)
+update_snapshot_previous() {
+    if [[ -e $NF_APP/previous ]]; then cp -p "$NF_APP/previous" "$NF_WORK/old-previous"; fi
+}
 update_cleanup() {
     local status=${1:-$?}
     trap - EXIT INT TERM
     if [[ ${NF_UPDATE_ACTIVE:-0} == 1 ]]; then
-        warn "Update failed; rollback target: $NF_UPDATE_PREVIOUS_VERSION"
+        warn "${NF_SWITCH_OPERATION:-Update} failed; rollback target: $NF_UPDATE_PREVIOUS_VERSION"
         if [[ ${NF_UPDATE_SWITCHED:-0} == 1 ]]; then
             if ! restore_snapshot_file "$NF_WORK/old-launcher" "$NF_CLI"; then
                 log ERROR "CLI restore failed; old runtime and recovery files retained at $NF_WORK"
                 exit 1
             fi
         fi
-        if ! runtime_rollback_cleanup keep-cli; then
+        if [[ ${NF_UPDATE_METADATA_CHANGED:-0} == 1 ]]; then
+            if [[ -f $NF_WORK/old-previous ]]; then
+                restore_snapshot_file "$NF_WORK/old-previous" "$NF_APP/previous" || {
+                    log ERROR "Previous version record recovery failed; evidence retained at $NF_WORK"
+                    exit 1
+                }
+            else
+                rm -f -- "$NF_APP/previous" || { log ERROR "Previous version record recovery failed; evidence retained at $NF_WORK"; exit 1; }
+            fi
+        fi
+        # Manual rollback selects an existing runtime; never delete that target
+        # when restoring the current launcher after a failed switch.
+        if [[ ${NF_UPDATE_RETAIN_TARGET:-0} != 1 ]] && ! runtime_rollback_cleanup keep-cli; then
             log ERROR "Update cleanup incomplete; current CLI restored, evidence retained at $NF_WORK"
             exit 1
         fi
@@ -60,7 +90,10 @@ cli_update() (
     trap update_cleanup EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    local target old_source=$NF_SOURCE old_version=$NF_NODEFORGE_VERSION old_runtime=$NF_RUNTIME file
+    local target old_version=$NF_NODEFORGE_VERSION previous file
+    previous=$(update_previous_version) || return 1
+    [[ -z $previous ]] || update_validate_previous "$previous"
+    update_snapshot_previous
     target=$(python3 "$NF_SOURCE/lib/update.py" "$NF_NODEFORGE_VERSION" "$NF_WORK" "$NF_CONFIG_DIR/trust/release-ed25519.pub") || return 1
     if [[ $target == "$old_version" ]]; then
         printf 'NodeForge %s is current; no update needed\n' "$old_version"
@@ -88,16 +121,48 @@ cli_update() (
     atomic_install "$NF_WORK/new-launcher" "$NF_CLI" 755 root root || return 1
     [[ $(bash "$NF_CLI" version) == "NodeForge $target" ]] || die 'Updated CLI version check failed'
     update_check_runtime "$NF_RUNTIME" || return 1
+    printf '%s\n' "$old_version" > "$NF_WORK/new-previous"
+    NF_UPDATE_METADATA_CHANGED=1
+    atomic_install "$NF_WORK/new-previous" "$NF_APP/previous" 600 root root || return 1
     NF_UPDATE_ACTIVE=0
-    # Retire only the old, validated inventory after the new CLI passes checks.
-    # Failure to retire does not undo a healthy update or delete unknown files.
-    (
-        NF_SOURCE=$old_source NF_NODEFORGE_VERSION=$old_version
-        runtime_paths
-        runtime_validate
-        while IFS= read -r file; do rm -f -- "$old_runtime/$file" || exit 1; done < <(runtime_files)
-        rm -f -- "$old_runtime/.inventory" || exit 1
-        rmdir -- "$old_runtime/lib" "$old_runtime/templates" "$old_runtime/tools" "$old_runtime/trust" "$old_runtime"
-    ) || warn 'Updated successfully; old runtime cleanup incomplete, preserved remaining files'
+    # Keep the immediate predecessor only. Unknown files remain protected by
+    # the same validated-inventory retirement used before previous retention.
+    if [[ -n $previous ]]; then
+        runtime_retire_version "$previous" || warn 'Updated successfully; older runtime cleanup incomplete, preserved remaining files'
+    fi
     printf 'NodeForge updated: %s -> %s; version and status healthy\n' "$old_version" "$target"
+)
+
+cli_rollback() (
+    cli_require_root
+    runtime_preinstall
+    local current=$NF_NODEFORGE_VERSION target
+    target=$(update_previous_version) || return 1
+    [[ -n $target ]] || die 'No rollback version available'
+    cli_load_state
+    update_validate_previous "$target"
+    printf 'NodeForge rollback: %s -> %s\n' "$current" "$target"
+    init_workspace
+    trap update_cleanup EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    NF_SWITCH_OPERATION=Rollback
+    NF_UPDATE_PREVIOUS_VERSION=$current
+    NF_UPDATE_RETAIN_TARGET=1
+    update_snapshot_previous
+    cp -p "$NF_CLI" "$NF_WORK/old-launcher"
+    NF_NODEFORGE_VERSION=$target
+    runtime_paths
+    update_check_runtime "$NF_RUNTIME" || return 1
+    runtime_launcher > "$NF_WORK/new-launcher" || return 1
+    NF_UPDATE_ACTIVE=1
+    NF_UPDATE_SWITCHED=1
+    atomic_install "$NF_WORK/new-launcher" "$NF_CLI" 755 root root || return 1
+    [[ $(bash "$NF_CLI" version) == "NodeForge $target" ]] || die 'Rollback CLI version check failed'
+    update_check_runtime "$NF_RUNTIME" || return 1
+    NF_UPDATE_METADATA_CHANGED=1
+    rm -- "$NF_APP/previous" || return 1
+    NF_UPDATE_ACTIVE=0
+    runtime_retire_version "$current" || warn 'Rolled back successfully; newer runtime cleanup incomplete, preserved remaining files'
+    printf 'NodeForge rolled back: %s -> %s; version and status healthy\n' "$current" "$target"
 )

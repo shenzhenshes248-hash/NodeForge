@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Retirement deliberately selects a version inside its own subshell only.
+# shellcheck disable=SC2030,SC2031
 set -Eeuo pipefail
 
 # Fixed local install inventory. This is ownership metadata, not a signed release.
@@ -107,6 +109,15 @@ runtime_stage() {
 runtime_publish() {
     python3 "$NF_SOURCE/lib/management.py" rename-directory "$NF_RUNTIME_STAGE" "$NF_RUNTIME"
 }
+# Retire only the existing validated inventory, preserving unknown contents.
+runtime_retire_version() (
+    local file NF_NODEFORGE_VERSION=$1 NF_APP NF_RUNTIME NF_RUNTIME_STAGE
+    runtime_paths
+    runtime_validate
+    while IFS= read -r file; do rm -f -- "$NF_RUNTIME/$file" || return 1; done < <(runtime_files)
+    rm -f -- "$NF_RUNTIME/.inventory" || return 1
+    rmdir -- "$NF_RUNTIME/lib" "$NF_RUNTIME/templates" "$NF_RUNTIME/tools" "$NF_RUNTIME/trust" "$NF_RUNTIME"
+)
 runtime_intent() {
     printf 'NodeForge local runtime creation\nversion=%s\nparent=%s\nstage=%s\nfinal=%s\nlauncher=%s\n' \
         "$NF_NODEFORGE_VERSION" "$NF_APP/releases" "$NF_RUNTIME_STAGE" "$NF_RUNTIME" "$NF_CLI"
@@ -146,9 +157,14 @@ runtime_rollback_cleanup() {
     done
 }
 runtime_remove() {
-    local file
+    local file previous
     runtime_check_paths
     if [[ -e $NF_RUNTIME ]]; then runtime_validate; fi
+    previous=$(update_previous_version) || return 1
+    if [[ -n $previous ]]; then
+        runtime_retire_version "$previous" || return 1
+        rm -- "$NF_APP/previous" || return 1
+    fi
     update_remove_trust || return 1
     if [[ -e $NF_CLI ]]; then
         trusted_file "$NF_CLI"
@@ -165,6 +181,9 @@ runtime_remove() {
 }
 runtime_preuninstall() {
     runtime_check_paths
+    local previous
+    previous=$(update_previous_version) || return 1
+    [[ -z $previous ]] || update_validate_previous "$previous"
     if [[ -e $NF_RUNTIME ]]; then runtime_validate; fi
     if [[ -e $NF_CLI ]]; then
         [[ -d $NF_RUNTIME ]] || die 'CLI entry has no trusted runtime'
