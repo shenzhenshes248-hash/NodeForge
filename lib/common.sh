@@ -6,6 +6,9 @@ info() { log INFO "$*"; }
 warn() { log WARN "$*"; }
 die() { log ERROR "$*"; exit 1; }
 load_modules() {
+    # Runtime inventories are immutable; diagnostics/helpers must not create
+    # unowned __pycache__ files that prevent failure rollback cleanup.
+    export PYTHONDONTWRITEBYTECODE=1
     local module
     for module in defaults version state system xray hysteria reality config service transaction share runtime update argo subscription warp diagnostics cli; do
         # Modules are linted individually by tests/run.sh.

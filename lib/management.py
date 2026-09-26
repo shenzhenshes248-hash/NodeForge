@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Strict local CLI validation. Never print input values or raw tool errors."""
 import base64
+import gzip
+import hashlib
+import io
+import tarfile
 import ipaddress
 import json
 import os
@@ -163,6 +167,148 @@ def listener(lines, listen, port, pid, family=None):
         raise ValueError('listener missing')
 
 
+BACKUP_REQUIRED = {'reality-config', 'reality-state', 'hy2-config', 'hy2-state', 'hy2-cert', 'hy2-key'}
+BACKUP_ARGO = {'argo-config', 'argo-state', 'argo-tunnel'}
+BACKUP_ALLOWED = BACKUP_REQUIRED | BACKUP_ARGO | {'argo-credentials', 'warp-state', 'subscription', 'argo-edge'}
+BACKUP_LIMIT = 4 * 1024 * 1024
+
+
+def backup_digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def backup_validate_inventory(files):
+    if not BACKUP_REQUIRED <= files.keys() or not files.keys() <= BACKUP_ALLOWED:
+        raise ValueError('file inventory')
+    if files.keys() & BACKUP_ARGO and not BACKUP_ARGO <= files.keys():
+        raise ValueError('incomplete Argo')
+    if 'argo-state' in files:
+        state = json.loads(files['argo-state'], object_pairs_hook=unique_object)
+        profile = json.loads(files['argo-config'])['inbounds'][0]['streamSettings']['network']
+        if profile not in ('ws', 'xhttp') or state.get('profile', 'ws') != profile:
+            raise ValueError('profile')
+        if (profile == 'xhttp') != ('argo-credentials' in files):
+            raise ValueError('Named Tunnel credentials')
+    elif 'argo-credentials' in files:
+        raise ValueError('orphan credentials')
+
+
+def backup_create(output, version, pairs):
+    files = {}
+    for name, path in zip(pairs[::2], pairs[1::2]):
+        p = Path(path)
+        if p.is_symlink():
+            raise ValueError('symlink')
+        if p.exists():
+            if not p.is_file() or p.stat().st_size > BACKUP_LIMIT:
+                raise ValueError('invalid file')
+            files[name] = p.read_bytes()
+    backup_validate_inventory(files)
+    manifest = {'format': 'NodeForge-backup', 'schema': 1, 'version': version,
+                'files': {name: backup_digest(data) for name, data in files.items()}}
+    payload = {'manifest.json': json.dumps(manifest, sort_keys=True).encode(), **files}
+    fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as raw, tarfile.open(fileobj=raw, mode='w:gz') as archive:
+            for name, data in payload.items():
+                entry = tarfile.TarInfo(name)
+                entry.size, entry.mode = len(data), 0o600
+                archive.addfile(entry, io.BytesIO(data))
+    except BaseException:
+        Path(output).unlink(missing_ok=True)
+        raise
+
+
+def backup_extract(source, destination):
+    files = {}
+    # Read through the gzip trailer so truncated/corrupt streams cannot pass
+    # merely because tar reached its end marker first.
+    with gzip.open(source, 'rb') as compressed:
+        raw = compressed.read(BACKUP_LIMIT * (len(BACKUP_ALLOWED) + 1) + 10241)
+    if len(raw) > BACKUP_LIMIT * (len(BACKUP_ALLOWED) + 1) + 10240:
+        raise ValueError('archive too large')
+    with tarfile.open(fileobj=io.BytesIO(raw), mode='r:') as archive:
+        for entry in archive:
+            if (entry.name not in BACKUP_ALLOWED | {'manifest.json'} or entry.name in files
+                    or not entry.isfile() or entry.size > BACKUP_LIMIT or entry.size < 0):
+                raise ValueError('invalid archive member')
+            files[entry.name] = archive.extractfile(entry).read()
+    manifest = json.loads(files.pop('manifest.json'), object_pairs_hook=unique_object)
+    if (set(manifest) != {'format', 'schema', 'version', 'files'}
+            or manifest['format'] != 'NodeForge-backup' or type(manifest['schema']) is not int
+            or manifest['schema'] != 1
+            or not re.fullmatch(r'v\d+\.\d+\.\d+(?:-dev)?', manifest['version'])
+            or manifest['files'] != {name: backup_digest(data) for name, data in files.items()}):
+        raise ValueError('invalid manifest or checksum')
+    backup_validate_inventory(files)
+    root = Path(destination)
+    root.mkdir(mode=0o700)
+    for name, data in files.items():
+        with os.fdopen(os.open(root / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as out:
+            out.write(data)
+
+
+def backup_validate_stage(stage, config_dir, argo_dir, source):
+    from subscription import read_config, edge_address
+    stage, config_dir, argo_dir, source = map(Path, (stage, config_dir, argo_dir, source))
+    hy = read_json(stage / 'hy2-state')
+    expected = (f"listen: :{hy['listen']}\ntls:\n  cert: {config_dir.as_posix()}/hysteria.crt\n"
+                f"  key: {config_dir.as_posix()}/hysteria.key\nauth:\n  type: password\n"
+                f"  password: {hy['password']}\n")
+    if warp_hysteria((stage / 'hy2-config').read_text(), False) != expected:
+        raise ValueError('Hysteria identity/config mismatch')
+    def openssl(*args):
+        return subprocess.run(['openssl', *map(str, args)], check=True, capture_output=True,
+                              timeout=10).stdout
+    cert_public = openssl('x509', '-in', stage / 'hy2-cert', '-pubkey', '-noout')
+    key_public = openssl('pkey', '-in', stage / 'hy2-key', '-pubout')
+    if cert_public != key_public:
+        raise ValueError('certificate/key mismatch')
+    enabled = False
+    if (stage / 'warp-state').exists():
+        warp = read_json(stage / 'warp-state')
+        if warp.get('owner') != 'NodeForge' or warp.get('schema') != 1 or warp.get('mode') not in ('enabled', 'disabled'):
+            raise ValueError('WARP state')
+        enabled = warp['mode'] == 'enabled'
+    reality = read_json(stage / 'reality-config')
+    if (reality['outbounds'][0].get('tag') == 'warp') != enabled:
+        raise ValueError('Reality/WARP state mismatch')
+    if (stage / 'argo-state').exists():
+        config = read_json(stage / 'argo-config')
+        inbound = config['inbounds'][0]
+        profile = inbound['streamSettings']['network']
+        template = read_json(source / 'templates' / f'vless-{profile}.json')
+        uuid = inbound['settings']['clients'][0]['id']
+        if not re.fullmatch(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}', uuid):
+            raise ValueError('Argo UUID')
+        if type(inbound['port']) is not int or not 1024 <= inbound['port'] <= 65535:
+            raise ValueError('Argo port')
+        template['inbounds'][0]['port'] = inbound['port']
+        template['inbounds'][0]['settings']['clients'][0]['id'] = uuid
+        warp_xray(template, enabled)
+        if template != config:
+            raise ValueError('Argo configuration')
+        tunnel = read_json(stage / 'argo-tunnel')
+        if profile == 'ws':
+            if tunnel != {}:
+                raise ValueError('Quick Tunnel configuration')
+        else:
+            credentials = read_json(stage / 'argo-credentials')
+            domain = read_json(stage / 'argo-state')['tunnel_domain']
+            if (not hostname(domain) or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', credentials['TunnelID'])
+                    or not all(isinstance(credentials[k], str) and credentials[k] for k in ('AccountTag', 'TunnelSecret'))):
+                raise ValueError('Named Tunnel identity')
+            expected_tunnel = {'tunnel': credentials['TunnelID'], 'credentials-file': (argo_dir / 'credentials.json').as_posix(),
+                               'ingress': [{'hostname': domain, 'service': f"http://127.0.0.1:{inbound['port']}"},
+                                           {'service': 'http_status:404'}]}
+            if tunnel != expected_tunnel:
+                raise ValueError('Named Tunnel configuration')
+    if (stage / 'subscription').exists():
+        read_config(stage / 'subscription')
+    if (stage / 'argo-edge').exists():
+        edge_address(read_json(stage / 'argo-edge')['address'])
+
+
 def main():
     if sys.argv[1] in ('warp-xray', 'warp-hysteria'):
         operation, mode, path = sys.argv[1:4]
@@ -182,6 +328,12 @@ def main():
         os.rename(source, destination)
     elif sys.argv[1] in ('state', 'link'):
         validate_state(*sys.argv[2:5], derive=True)
+    elif sys.argv[1] == 'backup-create':
+        backup_create(sys.argv[2], sys.argv[3], sys.argv[4:])
+    elif sys.argv[1] == 'backup-extract':
+        backup_extract(sys.argv[2], sys.argv[3])
+    elif sys.argv[1] == 'backup-validate':
+        backup_validate_stage(*sys.argv[2:])
     elif sys.argv[1] == 'listener':
         listener(sys.stdin.read(), *sys.argv[2:])
     else:
@@ -191,6 +343,7 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OSError, subprocess.SubprocessError):
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OSError,
+            AssertionError, EOFError, tarfile.TarError, subprocess.SubprocessError):
         print('NodeForge: local validation failed (details suppressed)', file=sys.stderr)
         sys.exit(1)

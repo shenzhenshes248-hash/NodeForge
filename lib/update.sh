@@ -36,6 +36,7 @@ update_cleanup() {
     local status=${1:-$?}
     trap - EXIT INT TERM
     if [[ ${NF_UPDATE_ACTIVE:-0} == 1 ]]; then
+        warn "Update failed; rollback target: $NF_UPDATE_PREVIOUS_VERSION"
         if [[ ${NF_UPDATE_SWITCHED:-0} == 1 ]]; then
             if ! restore_snapshot_file "$NF_WORK/old-launcher" "$NF_CLI"; then
                 log ERROR "CLI restore failed; old runtime and recovery files retained at $NF_WORK"
@@ -54,6 +55,7 @@ cli_update() (
     cli_load_state
     runtime_preinstall
     update_trust || die 'Cannot establish fixed update trust anchor'
+    NF_UPDATE_PREVIOUS_VERSION=$NF_NODEFORGE_VERSION
     init_workspace
     trap update_cleanup EXIT
     trap 'exit 130' INT
@@ -64,6 +66,7 @@ cli_update() (
         printf 'NodeForge %s is current; no update needed\n' "$old_version"
         return 0
     fi
+    printf 'NodeForge update: %s -> %s\n' "$old_version" "$target"
     NF_SOURCE=$NF_WORK/extracted/nodeforge-$target
     load_nodeforge_version
     [[ $NF_NODEFORGE_VERSION == "$target" ]] || die 'Update VERSION mismatch'
@@ -96,5 +99,5 @@ cli_update() (
         rm -f -- "$old_runtime/.inventory" || exit 1
         rmdir -- "$old_runtime/lib" "$old_runtime/templates" "$old_runtime/tools" "$old_runtime/trust" "$old_runtime"
     ) || warn 'Updated successfully; old runtime cleanup incomplete, preserved remaining files'
-    printf 'NodeForge updated to %s; version and status healthy\n' "$target"
+    printf 'NodeForge updated: %s -> %s; version and status healthy\n' "$old_version" "$target"
 )

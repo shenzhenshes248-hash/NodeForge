@@ -15,6 +15,7 @@ for suite in tests/test_*.sh; do
 done
 "${PYTHON:-python3}" tests/test_network.py
 "${PYTHON:-python3}" tests/test_management.py
+"${PYTHON:-python3}" tests/test_maintenance.py
 "${PYTHON:-python3}" tests/test_warp.py
 "${PYTHON:-python3}" tests/test_release.py
 "${PYTHON:-python3}" tests/test_bootstrap.py
